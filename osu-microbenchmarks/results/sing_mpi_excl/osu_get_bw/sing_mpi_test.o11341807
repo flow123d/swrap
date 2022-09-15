@@ -1,0 +1,47 @@
++ which python3
+/usr/bin/python3
++ cd /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4
++ pwd
+/auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4
++ prog=/tutorials/OSU-MicroBenchmarks/build.mpich/libexec/osu-micro-benchmarks/mpi/one-sided/osu_get_bw
++ python3 singularity_exec_mpi.py -i osu-microbenchmarks.sif -n 2 /tutorials/OSU-MicroBenchmarks/build.mpich/libexec/osu-micro-benchmarks/mpi/one-sided/osu_get_bw
+# charon21.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# charon21.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# charon21.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# charon22.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# charon22.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# charon22.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# OSU MPI_Get Bandwidth Test v5.5
+# Window creation: MPI_Win_allocate
+# Synchronization: MPI_Win_flush
+# Size      Bandwidth (MB/s)
+1                       2.72
+2                       5.42
+4                      10.99
+8                      22.30
+16                     44.52
+32                     88.60
+64                    178.20
+128                   352.40
+256                   693.58
+512                  1323.85
+1024                 2454.90
+2048                 4156.77
+4096                 7007.07
+8192                 7135.96
+16384                4612.29
+32768                8250.68
+65536                8636.70
+131072              11378.88
+262144              11972.89
+524288              12252.83
+1048576             12326.96
+2097152             12350.26
+4194304              5562.69
+Hostname:  charon21.nti.tul.cz
+
+setting variable from ssh-agent: SSH_AUTH_SOCK = /tmp/ssh-0dFGCok3bdLe/agent.32243
+setting variable from ssh-agent: SSH_AGENT_PID = 32245
+sing_command: singularity exec -B /tmp/ssh-0dFGCok3bdLe/agent.32243 /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4/osu-microbenchmarks.sif
+sing_command_in_ssh: singularity exec  /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4/osu-microbenchmarks.sif
+singularity exec -B /tmp/ssh-0dFGCok3bdLe/agent.32243 /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4/osu-microbenchmarks.sif mpiexec -f /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4/11341807.meta-pbs.metacentrum.cz -launcher-exec /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4/launcher.sh -n 2 /tutorials/OSU-MicroBenchmarks/build.mpich/libexec/osu-micro-benchmarks/mpi/one-sided/osu_get_bw

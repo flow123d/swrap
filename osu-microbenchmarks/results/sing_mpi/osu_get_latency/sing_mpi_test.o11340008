@@ -1,0 +1,47 @@
++ which python3
+/usr/bin/python3
++ cd /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4
++ pwd
+/auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4
++ prog=/tutorials/OSU-MicroBenchmarks/build.mpich/libexec/osu-micro-benchmarks/mpi/one-sided/osu_get_latency
++ python3 singularity_exec_mpi.py -i osu-microbenchmarks.sif -n 2 /tutorials/OSU-MicroBenchmarks/build.mpich/libexec/osu-micro-benchmarks/mpi/one-sided/osu_get_latency
+# charon24.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# charon24.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# charon24.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# charon23.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# charon23.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# charon23.nti.tul.cz:22 SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u2
+# OSU MPI_Get latency Test v5.5
+# Window creation: MPI_Win_allocate
+# Synchronization: MPI_Win_flush
+# Size          Latency (us)
+1                       2.27
+2                       2.23
+4                       2.21
+8                       2.18
+16                      2.20
+32                      2.26
+64                      2.26
+128                     2.28
+256                     2.32
+512                     2.42
+1024                    2.57
+2048                    2.85
+4096                    3.36
+8192                    4.61
+16384                  10.93
+32768                  14.05
+65536                  20.97
+131072                 29.67
+262144                 41.39
+524288                 59.40
+1048576               101.41
+2097152               185.74
+4194304               355.14
+Hostname:  charon24.nti.tul.cz
+
+setting variable from ssh-agent: SSH_AUTH_SOCK = /tmp/ssh-NUnejdvbKAi0/agent.5997
+setting variable from ssh-agent: SSH_AGENT_PID = 5998
+sing_command: singularity exec -B /tmp/ssh-NUnejdvbKAi0/agent.5997 /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4/osu-microbenchmarks.sif
+sing_command_in_ssh: singularity exec  /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4/osu-microbenchmarks.sif
+singularity exec -B /tmp/ssh-NUnejdvbKAi0/agent.5997 /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4/osu-microbenchmarks.sif mpiexec -f /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4/11340008.meta-pbs.metacentrum.cz -launcher-exec /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4/launcher.sh -n 2 /tutorials/OSU-MicroBenchmarks/build.mpich/libexec/osu-micro-benchmarks/mpi/one-sided/osu_get_latency

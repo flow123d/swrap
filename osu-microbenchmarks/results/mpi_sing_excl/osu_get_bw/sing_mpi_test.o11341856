@@ -1,0 +1,63 @@
++ which python3
+/usr/bin/python3
++ cd /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4
++ pwd
+/auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4
++ prog=/tutorials/OSU-MicroBenchmarks/build.mpich/libexec/osu-micro-benchmarks/mpi/one-sided/osu_get_bw
++ module add mpich-3.0.2-gcc
+++ /software/modules/3.2.10/Modules/3.2.10/bin/modulecmd bash add mpich-3.0.2-gcc
++ eval CC=mpicc ';export' 'CC;CFLAGS=-fPIC' ';export' 'CFLAGS;CXX=mpicxx' ';export' 'CXX;CXXFLAGS=-fPIC' ';export' 'CXXFLAGS;F90=mpif90' ';export' 'F90;FC=mpif77' ';export' 'FC;FCFLAGS=-fPIC' ';export' 'FCFLAGS;LD_LIBRARY_PATH=/software/mpich-3.0.2/gcc/lib' ';export' 'LD_LIBRARY_PATH;LOADEDMODULES=metabase:mpich-3.0.2-gcc' ';export' 'LOADEDMODULES;MANPATH=/software/mpich-3.0.2/gcc/share/man/:/software/modules/current/Modules/3.2.10/share/man:/usr/share/man:/usr/share/man' ';export' 'MANPATH;MPIEXEC_COMM=pmi' ';export' 'MPIEXEC_COMM;PATH=/software/mpich-3.0.2/gcc/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/software/meta-utils/public:/usr/bin' ';export' 'PATH;_LMFILES_=/packages/run/modules-2.0/modulefiles/metabase:/packages/run/modules-2.0/modulefiles/mpich-3.0.2-gcc' ';export' '_LMFILES_;'
+++ CC=mpicc
+++ export CC
+++ CFLAGS=-fPIC
+++ export CFLAGS
+++ CXX=mpicxx
+++ export CXX
+++ CXXFLAGS=-fPIC
+++ export CXXFLAGS
+++ F90=mpif90
+++ export F90
+++ FC=mpif77
+++ export FC
+++ FCFLAGS=-fPIC
+++ export FCFLAGS
+++ LD_LIBRARY_PATH=/software/mpich-3.0.2/gcc/lib
+++ export LD_LIBRARY_PATH
+++ LOADEDMODULES=metabase:mpich-3.0.2-gcc
+++ export LOADEDMODULES
+++ MANPATH=/software/mpich-3.0.2/gcc/share/man/:/software/modules/current/Modules/3.2.10/share/man:/usr/share/man:/usr/share/man
+++ export MANPATH
+++ MPIEXEC_COMM=pmi
+++ export MPIEXEC_COMM
+++ PATH=/software/mpich-3.0.2/gcc/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/software/meta-utils/public:/usr/bin
+++ export PATH
+++ _LMFILES_=/packages/run/modules-2.0/modulefiles/metabase:/packages/run/modules-2.0/modulefiles/mpich-3.0.2-gcc
+++ export _LMFILES_
++ mpiexec -f /var/spool/pbs/aux/11341856.meta-pbs.metacentrum.cz singularity exec osu-microbenchmarks.sif /tutorials/OSU-MicroBenchmarks/build.mpich/libexec/osu-micro-benchmarks/mpi/one-sided/osu_get_bw
+# OSU MPI_Get Bandwidth Test v5.5
+# Window creation: MPI_Win_allocate
+# Synchronization: MPI_Win_flush
+# Size      Bandwidth (MB/s)
+1                       3.12
+2                       6.21
+4                      12.40
+8                      24.96
+16                     49.33
+32                     99.91
+64                    199.78
+128                   393.26
+256                   767.22
+512                  1463.76
+1024                 2628.11
+2048                 4582.84
+4096                 7088.88
+8192                 7217.22
+16384                4439.17
+32768                8228.19
+65536                8597.13
+131072              11313.05
+262144              12030.34
+524288              12260.04
+1048576             12332.27
+2097152             12343.79
+4194304              4659.23

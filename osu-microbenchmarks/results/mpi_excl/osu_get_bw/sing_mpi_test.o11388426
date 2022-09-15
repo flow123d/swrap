@@ -1,0 +1,50 @@
++ which python3
+/usr/bin/python3
++ cd /auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4
++ pwd
+/auto/liberec3-tul/home/pavel_exner/workspace/singularity_tryout_4
++ prog=/tutorials/OSU-MicroBenchmarks/build.mpich_psm/libexec/osu-micro-benchmarks/mpi/one-sided/osu_get_bw
++ rs_home=/auto/liberec3-tul/home/radeksrb
++ PATH=/auto/liberec3-tul/home/radeksrb/sing/mpich_psm-install/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/software/meta-utils/public:/usr/bin
++ export PATH
++ which mpiexec
+/auto/liberec3-tul/home/radeksrb/sing/mpich_psm-install/bin/mpiexec
++ mpiexec --version
+HYDRA build details:
+    Version:                                 3.4.2
+    Release Date:                            Wed May 26 15:51:40 CDT 2021
+    CC:                              gcc    
+    Configure options:                       '--disable-option-checking' '--prefix=/storage/liberec3-tul/home/radeksrb/sing/mpich_psm-install' '--with-device=ch4:ofi' '--cache-file=/dev/null' '--srcdir=.' 'CC=gcc' 'CFLAGS= -O2' 'LDFLAGS=' 'LIBS=' 'CPPFLAGS= -DNETMOD_INLINE=__netmod_inline_ofi__ -I/storage/liberec3-tul/home/radeksrb/sing/mpich-3.4.2/src/mpl/include -I/storage/liberec3-tul/home/radeksrb/sing/mpich-3.4.2/src/mpl/include -I/storage/liberec3-tul/home/radeksrb/sing/mpich-3.4.2/modules/yaksa/src/frontend/include -I/storage/liberec3-tul/home/radeksrb/sing/mpich-3.4.2/modules/yaksa/src/frontend/include -I/storage/liberec3-tul/home/radeksrb/sing/mpich-3.4.2/modules/json-c -I/storage/liberec3-tul/home/radeksrb/sing/mpich-3.4.2/modules/json-c -D_REENTRANT -I/storage/liberec3-tul/home/radeksrb/sing/mpich-3.4.2/src/mpi/romio/include -I/storage/liberec3-tul/home/radeksrb/sing/mpich-3.4.2/modules/libfabric/include -I/storage/liberec3-tul/home/radeksrb/sing/mpich-3.4.2/modules/libfabric/include' 'MPLLIBNAME=mpl'
+    Process Manager:                         pmi
+    Launchers available:                     ssh rsh fork slurm ll lsf sge manual persist
+    Topology libraries available:            hwloc
+    Resource management kernels available:   user slurm ll lsf sge pbs cobalt
+    Demux engines available:                 poll select
++ mpiexec -f /var/spool/pbs/aux/11388426.meta-pbs.metacentrum.cz /auto/liberec3-tul/home/radeksrb/tutorials/OSU-MicroBenchmarks/build.mpich_psm/libexec/osu-micro-benchmarks/mpi/one-sided/osu_get_bw
+# OSU MPI_Get Bandwidth Test v5.5
+# Window creation: MPI_Win_allocate
+# Synchronization: MPI_Win_flush
+# Size      Bandwidth (MB/s)
+1                       1.44
+2                       3.03
+4                       7.62
+8                      17.08
+16                     34.25
+32                     81.74
+64                    172.90
+128                   337.47
+256                   667.68
+512                  1274.27
+1024                 2289.23
+2048                 4171.29
+4096                 7233.16
+8192                 7252.49
+16384                6259.80
+32768                8218.02
+65536                8701.68
+131072              11477.43
+262144              12129.52
+524288              12275.23
+1048576             12330.45
+2097152             12358.77
+4194304              6033.27
