@@ -6,15 +6,19 @@ import subprocess
 
 from argparse import RawTextHelpFormatter
 
-def mprint(*margs, **mkwargs):
+def flush_print(*margs, **mkwargs):
     print(*margs, file=sys.stdout, flush=True, **mkwargs)
 
 def oscommand(command_string):
-    mprint(command_string)
-    mprint(os.popen(command_string).read())
+    flush_print(command_string)
+    flush_print(os.popen(command_string).read())
 
 def create_ssh_agent():
-    mprint("creating ssh agent...")
+    """
+    Setup ssh agent and set appropriate environment variables.
+    :return:
+    """
+    flush_print("creating ssh agent...")
     p = subprocess.Popen('ssh-agent -s',
                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          shell=True, universal_newlines=True)
@@ -33,15 +37,10 @@ def create_ssh_agent():
         if '=' in left:
             # get variable and value, put into os.environ
             varname, varvalue = left.split('=', 1)
-            mprint("setting variable from ssh-agent:", varname, "=", varvalue)
+            flush_print("setting variable from ssh-agent:", varname, "=", varvalue)
             os.environ[varname] = varvalue
 
-
-if __name__ == "__main__":
-
-    mprint("================== singularity_exec_mpi.py START ==================")
-    script_dir = os.getcwd()
-
+def arguments():
     parser = argparse.ArgumentParser(
         description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.',
         formatter_class=argparse.RawTextHelpFormatter)
@@ -57,12 +56,12 @@ if __name__ == "__main__":
                         help='''
                         directory path, its content will be copied to SCRATCHDIR;
                         ''')
-                        # if file path, each user defined path inside the file will be copied to SCRATCHDIR
+    # if file path, each user defined path inside the file will be copied to SCRATCHDIR
     parser.add_argument('prog', nargs=argparse.REMAINDER,
                         help='''
                         mpiexec arguments and the executable, follow mpiexec doc:
                         "mpiexec args executable pgmargs [ : args executable pgmargs ... ]"
-                        
+
                         still can use MPMD (Multiple Program Multiple Data applications):
                         -n 4 program1 : -n 3 program2 : -n 2 program3 ...
                         ''')
@@ -74,10 +73,16 @@ if __name__ == "__main__":
     # parser.print_help()
     # parser.print_usage()
     args = parser.parse_args()
+    return args
+
+
+def main():
+    flush_print("================== smpiexec.py START ==================")
+    script_dir = os.getcwd()
+    args = arguments()
 
     # get debug variable
     debug = args.debug
-
     # get program and its arguments
     prog_args = args.prog[1:]
 
@@ -89,7 +94,7 @@ if __name__ == "__main__":
     else:
         raise Exception("Invalid image: not a file nor docker hub link: " + args.image)
 
-    mprint("Hostname: ", os.popen('hostname').read())
+    flush_print("Hostname: ", os.popen('hostname').read())
     # mprint("os.environ", os.environ)
 
     ###################################################################################################################
@@ -100,7 +105,7 @@ if __name__ == "__main__":
     if debug:
         node_file = "testing_hostfile"
     else:
-        mprint("getting host file...")
+        flush_print("getting host file...")
         orig_node_file = os.environ['PBS_NODEFILE']
         node_file = os.path.join(script_dir, os.path.basename(orig_node_file))
         shutil.copy(orig_node_file, node_file)
@@ -115,25 +120,25 @@ if __name__ == "__main__":
         assert 'HOME' in os.environ
         ssh_known_hosts_file = os.path.join(os.environ['HOME'], '.ssh/known_hosts')
     
-    mprint("host file name:", ssh_known_hosts_file)
+    flush_print("host file name:", ssh_known_hosts_file)
 
     ssh_known_hosts = []
     if os.path.exists(ssh_known_hosts_file):
         with open(ssh_known_hosts_file, 'r') as fp:
             ssh_known_hosts = fp.readlines()
     else:
-        mprint("creating host file...")
+        flush_print("creating host file...")
         dirname = os.path.dirname(ssh_known_hosts_file)
         if not os.path.exists(dirname):
             os.makedirs(dirname)
 
-    mprint("reading host file...")
+    flush_print("reading host file...")
     with open(node_file) as fp:
         node_names_read = fp.read().splitlines()
         # remove duplicates
         node_names = list(dict.fromkeys(node_names_read))
 
-    mprint("connecting nodes...")
+    flush_print("connecting nodes...")
     for node in node_names:
         # touch all the nodes, so that they are accessible also through container
         os.popen('ssh ' + node + ' exit')
@@ -147,7 +152,7 @@ if __name__ == "__main__":
             if not splits[2] in ssh_known_hosts:
                 ssh_known_hosts_to_append.append(sk)
 
-    mprint("finishing host file...")
+    flush_print("finishing host file...")
     with open(ssh_known_hosts_file, 'a') as fp:
         fp.writelines(ssh_known_hosts_to_append)
 
@@ -165,14 +170,14 @@ if __name__ == "__main__":
     # Create Singularity container commands.
     ###################################################################################################################
 
-    mprint("assembling final command...")
+    flush_print("assembling final command...")
 
     scratch_dir_path = None
     if 'SCRATCHDIR' in os.environ:
         scratch_dir_path = os.environ['SCRATCHDIR']
-        mprint("Using SCRATCHDIR:", scratch_dir_path)
+        flush_print("Using SCRATCHDIR:", scratch_dir_path)
 
-        mprint("copying to SCRATCHDIR on all nodes...")
+        flush_print("copying to SCRATCHDIR on all nodes...")
         username = os.environ['USER']
         # get source files
         source = None
@@ -188,7 +193,7 @@ if __name__ == "__main__":
             #   source = ' '.join(paths)
 
         if source is None or source is []:
-            mprint(args.scratch_copy, "is empty")
+            flush_print(args.scratch_copy, "is empty")
 
         # create tar
         source_tar_filename = 'scratch.tar'
@@ -230,11 +235,11 @@ if __name__ == "__main__":
     sing_command = ' '.join(['singularity', 'exec', bindings, image])
     sing_command_in_launcher = ' '.join(['singularity', 'exec', bindings_in_launcher, image])
 
-    mprint('sing_command:', sing_command)
-    mprint('sing_command_in_ssh:', sing_command_in_launcher)
+    flush_print('sing_command:', sing_command)
+    flush_print('sing_command_in_ssh:', sing_command_in_launcher)
 
     # B] prepare node launcher script
-    mprint("creating launcher script...")
+    flush_print("creating launcher script...")
     launcher_path = os.path.join(script_dir, "launcher.sh")
     launcher_lines = [
         '#!/bin/bash',
@@ -273,14 +278,18 @@ if __name__ == "__main__":
     # Final call.
     ###################################################################################################################
     if scratch_dir_path:
-      mprint("Entering SCRATCHDIR:", scratch_dir_path)
+      flush_print("Entering SCRATCHDIR:", scratch_dir_path)
       os.chdir(scratch_dir_path)
 
-    mprint("current directory:", os.getcwd())
+    flush_print("current directory:", os.getcwd())
     # mprint(os.popen("ls -l").read())
-    mprint("final command:")
-    mprint("=================== singularity_exec_mpi.py END ===================")
+    flush_print("final command:")
+    flush_print("=================== smpiexec.py END ===================")
     if not debug:
-        mprint("================== Program output START ==================")
+        flush_print("================== Program output START ==================")
         os.system(final_command)
-        mprint("=================== Program output END ===================")
+        flush_print("=================== Program output END ===================")
+
+
+if __name__ == "__main__":
+    main()
