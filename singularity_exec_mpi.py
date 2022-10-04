@@ -251,7 +251,7 @@ if __name__ == "__main__":
         '    awk \'{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush(); }\'',
         '}\n',
         'PARENT_COMMAND=$(ps -o args= $PPID)',
-        'echo ""',
+        'echo "" ' + launcher_log,
         'echo "parent call: $PARENT_COMMAND" ' + launcher_log,
         'echo $(hostname) ' + launcher_log,
         'echo $(pwd) ' + launcher_log,
