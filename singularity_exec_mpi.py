@@ -40,7 +40,7 @@ def create_ssh_agent():
 if __name__ == "__main__":
 
     mprint("================== singularity_exec_mpi.py START ==================")
-    script_dir = os.getcwd()
+    current_dir = os.getcwd()
 
     parser = argparse.ArgumentParser(
         description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.',
@@ -96,13 +96,19 @@ if __name__ == "__main__":
     # Process node file and setup ssh access to given nodes.
     ###################################################################################################################
 
+    pbs_job_id = os.environ['PBS_JOBID']
+    mprint("PBS job id: ", pbs_job_id)
+    pbs_job_aux_dir =  os.path.join(current_dir, pbs_job_id + '_job')
+    # create auxiliary job output directory
+    os.makedirs(pbs_job_aux_dir, mode=0o775)
+    
     # get nodefile, copy it to local dir so that it can be passed into container mpiexec later
     if debug:
         node_file = "testing_hostfile"
     else:
         mprint("getting host file...")
         orig_node_file = os.environ['PBS_NODEFILE']
-        node_file = os.path.join(script_dir, os.path.basename(orig_node_file))
+        node_file = os.path.join(pbs_job_aux_dir, os.path.basename(orig_node_file))
         shutil.copy(orig_node_file, node_file)
         # mprint(os.popen("ls -l").read())
 
@@ -192,8 +198,8 @@ if __name__ == "__main__":
 
         # create tar
         source_tar_filename = 'scratch.tar'
-        source_tar_filepath = os.path.join(script_dir, source_tar_filename)
-        command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', script_dir])
+        source_tar_filepath = os.path.join(current_dir, source_tar_filename)
+        command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
         oscommand(command)
 
         for node in node_names:
@@ -214,7 +220,7 @@ if __name__ == "__main__":
     # A] process bindings, exclude ssh agent in launcher bindings
     bindings = "-B " + os.environ['SSH_AUTH_SOCK']
     # possibly add current dir to container bindings
-    # bindings = bindings + "," + script_dir + ":" + script_dir
+    # bindings = bindings + "," + current_dir + ":" + current_dir
     bindings_in_launcher = ""
     if args.bind != "":
         bindings = bindings + "," + args.bind
@@ -235,16 +241,27 @@ if __name__ == "__main__":
 
     # B] prepare node launcher script
     mprint("creating launcher script...")
-    launcher_path = os.path.join(script_dir, "launcher.sh")
+    launcher_path = os.path.join(pbs_job_aux_dir, "launcher_" + pbs_job_id + ".sh")
+    launcher_log = '| adddate >> ' + os.path.join(pbs_job_aux_dir, 'launcher_' + pbs_job_id + '.log')
+    # https://stackoverflow.com/questions/20572934/get-the-name-of-the-caller-script-in-bash-script
     launcher_lines = [
         '#!/bin/bash',
         '\n',
-        'echo $(hostname) >> launcher.log',
-        'echo $(pwd) >> launcher.log',
-        'echo $@ >> launcher.log',
-        'echo "singularity container: $SINGULARITY_NAME" >> launcher.log',
+        'adddate() {',
+        '    awk \'{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush(); }\'',
+        '}\n',
+        'PARENT_COMMAND=$(ps -o args= $PPID)',
+        'echo ""',
+        'echo "parent call: $PARENT_COMMAND" ' + launcher_log,
+        'echo $(hostname) ' + launcher_log,
+        'echo $(pwd) ' + launcher_log,
+        'echo "\$@: $@" ' + launcher_log,
+        'echo "ssh parameters: $1 $2" ' + launcher_log,
+        'echo "launcher command: ${@:3}" ' + launcher_log,
+        'echo "singularity container: $SINGULARITY_NAME" ' + launcher_log,
         '\n',
         'ssh $1 $2 ' + sing_command_in_launcher + ' ${@:3}',
+        'echo "ssh exit status: " $? ' + launcher_log
     ]
     with open(launcher_path, 'w') as f:
         f.write('\n'.join(launcher_lines))
