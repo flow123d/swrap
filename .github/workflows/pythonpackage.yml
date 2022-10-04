@@ -46,9 +46,7 @@ jobs:
       run: |
         export SSHPASS="${{secrets.CHARON_PASS}}"
         opt="-o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no"
-        sshpass -e ssh ${opt} ${{secrets.CHARON_USER_FRONTEND}} ls
-        sshpass -e ssh ${opt} ${{secrets.CHARON_USER_FRONTEND}} ls testing        
-        sshpass -e ssh ${opt} ${{secrets.CHARON_USER_FRONTEND}} ls testing/integrated
-        sshpass -e ssh ${opt} ${{secrets.CHARON_USER_FRONTEND}} python testing/integrated/test_all.py
-  
+        BRANCH="${GITHUB_REF##*/}"
+        sshpass -e ssh ${opt} ${{secrets.CHARON_USER_FRONTEND}} "cd _testing; rm -rf swrap; git clone -b ${BRANCH} https://github.com/flow123d/swrap.git; cd swrap/testing/integrated; python3 test_all.py"
+
     
