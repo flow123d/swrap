@@ -44,9 +44,8 @@ jobs:
       uses: actions/setup-python@v3
     - name: Integration tests
       run: |
-        SSHPASS="${{secrets.CHARON_pass}}"
-        pass_cmd=""
+        SSHPASS="${{secrets.CHARON_PASS}}"
         opt="-o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no"
-        sshpass -e ssh ${opt} ${{secrets.CHARON_user_frontend}} make -C testing/integration all
+        sshpass -e ssh ${opt} ${{secrets.CHARON_USER_FRONTEND}} make -C testing/integration all
   
     
