@@ -46,6 +46,6 @@ jobs:
       run: |
         export SSHPASS="${{secrets.CHARON_PASS}}"
         opt="-o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no"
-        sshpass -e ssh ${opt} ${{secrets.CHARON_USER_FRONTEND}} make -C testing/integration all
+        sshpass -e ssh ${opt} ${{secrets.CHARON_USER_FRONTEND}} python testing/integrated/test_all.py
   
     
