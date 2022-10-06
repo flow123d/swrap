@@ -1,5 +1,6 @@
 # Run all integrated tests in PBAS, wait for them in parallel, report their results.
 # Has to be run from testing/integrated where it is placed.
+from typing import *
 from queue import Queue, Empty
 from functools import partial
 import sys
@@ -11,6 +12,7 @@ import json
 import re
 import attrs
 from concurrent.futures import ThreadPoolExecutor
+import inspect
 
 # substitute given template PBS script with given directory
 
@@ -90,24 +92,30 @@ class JobState:
 
 @attrs.define
 class Run:
-    _counter = 0
+
     @classmethod
     def create(cls, *args, **kwargs):
-        cls._counter += 1
-        print(args, kwargs)
+        if hasattr(cls, '_counter'):
+            cls._counter += 1
+        else:
+            cls._counter = 0
+        print(cls._counter, args, kwargs)
+        #print(inspect.signature(cls.__init__).parameters)
         return cls(cls._counter, *args, **kwargs)
+
     id: int
     command : str
-    n_nodes: int = 1
+    n_nodes: int
     timeout: float = 5 * 60
-    ref_return_code: int = 0
+    ref_return_code: int = attrs.field( default = 0)
     image : str = attrs.field(kw_only=True)
     queue : Queue = attrs.field(kw_only=True)
     pool : ThreadPoolExecutor = attrs.field(kw_only=True)
-    check_fn = attrs.field(kw_only=True)
+    check_fn: Callable[..., str] = attrs.field(kw_only=True)
+
     @check_fn.default
     def _make_check_fn(self):
-        return self.default_check_fn
+        return Run.default_check_fn
 
 
     def call_qstat(self, id_str):
@@ -124,83 +132,6 @@ class Run:
         return subprocess.CompletedProcess([], returncode=0, stdout=f"{self.id}")
 
     def job_state(self, id_str):
-        """
-        (BULLSEYE)jan_brezina@charon:~/_testing/swrap/testing/integrated/01_mpi4py$ qstat -xf -F json 12860476.meta-pbs.metacentrum.cz
-    {
-        "timestamp":1664911414,
-        "pbs_version":"19.0.0",
-        "pbs_server":"meta-pbs.metacentrum.cz",
-        "Jobs":{
-            "12860476.meta-pbs.metacentrum.cz":{
-                "Job_Name":"swrap_01",
-                "Job_Owner":"jan_brezina@META",
-                "job_state":"R",
-                "queue":"charon_2h",
-                "server":"meta-pbs.metacentrum.cz",
-                "Checkpoint":"u",
-                "ctime":"Tue Oct  4 21:23:20 2022",
-                "Error_Path":"charon.nti.tul.cz:/storage/liberec3-tul/home/jan_brezina/_testing/swrap/testing/integrated/01_mpi4py/swrap_01.e12860476",
-                "exec_host":"charon24/0*2+charon21/0*2",
-                "exec_host2":"charon24.nti.tul.cz:15002/0*2+charon21.nti.tul.cz:15002/0*2",
-                "exec_vnode":"(charon24:ncpus=2:mem=4194304kb)+(charon21:ncpus=2:mem=4194304kb)",
-                "Hold_Types":"n",
-                "Join_Path":"oe",
-                "Keep_Files":"n",
-                "Mail_Points":"a",
-                "mtime":"Tue Oct  4 21:23:33 2022",
-                "Output_Path":"charon.nti.tul.cz:/storage/liberec3-tul/home/jan_brezina/_testing/swrap/testing/integrated/01_mpi4py/swrap_01.o12860476",
-                "Priority":0,
-                "qtime":"Tue Oct  4 21:23:20 2022",
-                "Rerunable":"True",
-                "Resource_List":{
-                    "mem":"8gb",
-                    "mpiprocs":4,
-                    "ncpus":4,
-                    "nodect":2,
-                    "place":"scatter",
-                    "select":"2:ncpus=2:mem=4gb:mpiprocs=2:ompthreads=1",
-                    "soft_walltime":"00:01:00",
-                    "walltime":"00:01:00"
-                },
-                "stime":"Tue Oct  4 21:23:33 2022",
-                "Shell_Path_List":"/bin/bash",
-                "substate":41,
-                "Variable_List":{
-                    "PBS_O_HOME":"/storage/liberec3-tul/home/jan_brezina",
-                    "PBS_O_LANG":"en_US.UTF-8",
-                    "PBS_O_LOGNAME":"jan_brezina",
-                    "PBS_O_PATH":"/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/software/meta-utils/public:/usr/bin",
-                    "PBS_O_SHELL":"/bin/bash",
-                    "PBS_O_WORKDIR":"/storage/liberec3-tul/home/jan_brezina/_testing/swrap/testing/integrated/01_mpi4py",
-                    "PBS_O_SYSTEM":"Linux",
-                    "PBS_O_QUEUE":"charon_2h",
-                    "PBS_O_HOST":"charon.nti.tul.cz",
-                    "PBS_RESC_MEM":4294967296,
-                    "TORQUE_RESC_MEM":4294967296,
-                    "PBS_NUM_PPN":2,
-                    "PBS_NCPUS":2,
-                    "TORQUE_RESC_PROC":2,
-                    "PBS_NGPUS":0,
-                    "PBS_RESC_TOTAL_MEM":8589934592,
-                    "TORQUE_RESC_TOTAL_MEM":8589934592,
-                    "PBS_RESC_TOTAL_PROCS":4,
-                    "TORQUE_RESC_TOTAL_PROCS":4,
-                    "PBS_NUM_NODES":2,
-                    "PBS_RESC_TOTAL_WALLTIME":60,
-                    "TORQUE_RESC_TOTAL_WALLTIME":60
-                },
-                "comment":"Job run at Tue Oct 04 at 21:23 on (charon24:ncpus=2:mem=4194304kb)+(charon21:ncpus=2:mem=4194304kb)",
-                "etime":"Tue Oct  4 21:23:20 2022",
-                "run_count":1,
-                "eligible_time":"00:00:00",
-                "Submit_arguments":"job.sh",
-                "project":"_pbs_project_default",
-                "Submit_Host":"charon.nti.tul.cz",
-                "credential_id":"jan_brezina@META",
-                "credential_validity":"Wed Oct  5 21:19:59 2022"
-            }
-        }
-    }
 
         :return:
         """
@@ -234,7 +165,7 @@ class Run:
 
     def pbs_submit(self):
         self.pbs_script = self.pbs_script()
-        proc = call_qsub(self.pbs_script)
+        proc = self.call_qsub(self.pbs_script)
         if proc.returncode != 0:
             raise Exception(
                 f"qsub error code {proc.returncode} for script: {self.pbs_script}\nSTDERR:\n{proc.stderr.decode('utf-8')}")
@@ -276,7 +207,7 @@ class Run:
         self.queue.put((self.id, msg))
 
     @staticmethod
-    def default_check_fn(state, ref_return_code):
+    def default_check_fn(state: JobState, ref_return_code: int) -> str:
         """
         Check state
         :param state:
