@@ -4,13 +4,12 @@
 #PBS -l place=scatter
 #PBS -l walltime=00:01:00
 #PBS -q charon_2h
-#PBS -N {script_file}
 #PBS -j oe
 
 # Template parameters
 # ===================
 # swrap_main={swrap_main} - main swrap executable, e.g. smpiexec
-# singulerity_image={singulerity_image} - image to use, docker repository can be used
+# singularity_image={singularity_image} - image to use, docker repository can be used
 # n_nodes={n_nodes} - number of nodes to run the test, for the comunnication tests we always use distinct node for each process
 # script_file={script_file} - command to run in the image
 
@@ -24,7 +23,7 @@ pwd
 # collect arguments:
 
 # singularity_exec_mpi script path
-smpiexecSING_SCRIPT="../singularity_exec_mpi.py"
+SING_SCRIPT="../singularity_exec_mpi.py"
 
 # singularity SIF image path (preferably create in advance)
 SING_FLOW="$HOME/workspace/flow123d_images/flow123d_geomop-gnu:2.0.0.sif"
