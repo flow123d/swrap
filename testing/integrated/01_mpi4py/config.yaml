@@ -1,0 +1,40 @@
+common:    # these fields are used in every case    
+    image: docker://flow123d/geomop-gnu:2.0.0
+    # image to run in 
+    wrapper: smpiexec.py
+    # wrapper to test, currently just mpiexec
+    
+    #####
+    # PBS options see: https://wiki.metacentrum.cz/wiki/About_scheduling_system#How_to_set_number_of_nodes_and_processors
+    pbs_select: 1      
+    # PBS select option: "-l select={pbs_select}"
+    # syntax select=<chunk_spec> [+ <other chunk specs>]
+    # <chunk spec> = <n chunks>[:ncpu=<n processes per chunk>][:mem=<memory limit>][:scratch_<type>=<size>]
+    # namely ncpu, mem,and scratch_* optionas can be specified separately for every chunk spec. 
+    # scratch types: local, ssd, shared (network), shm (ramdisk); see: https://wiki.metacentrum.cz/wiki/Scratch_storage
+    pbs_place: scatter     
+    # PBS place option: "-l place={pbs_place}"; default = scatter
+    pbs_queue: charon_2h 
+    # PBS queue to use
+    pbs_walltime: 00:10:00
+    # PBS walltime: [[hh:]mm:]ss
+    checkers: 
+        check_return_code: 0
+    # list of check function calls to apply to the stdout (marged from all MPI processes) of the command
+    # every check returns true on success, total is true if all checks are true    
+    # TODO: other checkers
+    
+cases:
+    - name: ls
+      # optional name, to name the pbas script and wrking directories; will be appended by the hash of parameters
+      command: -n 2 ls -l  
+      # command passed to the wrapper, e.g. mpiexec arguments. Allows both SPMD as MPMD setups.
+      # used number of precesses must fit the scheduled number on PBS; see pbs_* keys
+      # the host file is passed automaticaly
+      # for mpiexec see: https://www.open-mpi.org/doc/v3.0/man1/mpiexec.1.php
+      pbs_select: 2
+      
+    - name: script
+      command: -n 4 python3 script.py
+      pbs_select: 2:ncpus=2
+        

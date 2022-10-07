@@ -272,7 +272,7 @@ def main():
     mpiexec_args = " ".join([mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path])
 
     # F] join all the arguments into final singularity container command
-    final_command = " ".join([sing_command, mpiexec_args, *prog_args])
+    final_command_list = [sing_command, mpiexec_args, *prog_args]
 
     ###################################################################################################################
     # Final call.
@@ -287,9 +287,10 @@ def main():
     flush_print("=================== smpiexec.py END ===================")
     if not debug:
         flush_print("================== Program output START ==================")
-        os.system(final_command)
-        flush_print("=================== Program output END ===================")
+        proc = subprocess.run(final_command_list)
 
+        flush_print("=================== Program output END ===================")
+    exit(proc.returncode)
 
 if __name__ == "__main__":
     main()
