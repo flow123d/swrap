@@ -1,7 +1,7 @@
 common:    # these fields are used in every case    
     image: docker://flow123d/geomop-gnu:2.0.0
     # image to run in 
-    wrapper: smpiexec.py
+    wrapper: smpiexec
     # wrapper to test, currently just mpiexec
     
     #####
