@@ -1,22 +1,24 @@
 import setuptools
 
+__version__="0.1.0"
+
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="swrap",
-    version="0.1.0",
+    version=__version__,
     license='GPL 3.0',
-    description='B-spline modelling CAD and meshing tools.',
+    description='Utility for full (singularity) containerization of MPI based applications.',
     long_description=long_description,
     long_description_content_type="text/markdown",
     author='Jan Brezina',
     author_email='jan.brezina@tul.cz',
-    url='https://github.com/geomop/bgem',
-    download_url='https://github.com/geomop/bgem/archive/v{__version__}.tar.gz',
+    url='https://github.com/flow123d/swrap',
+    download_url='https://github.com/flow123d/swrap/archive/v{__version__}.tar.gz',
     classifiers=[
         # complete classifier list: http://pypi.python.org/pypi?%3Aaction=list_classifiers
-        'Development Status :: 2 - Pre-Alpha',
+        'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
         'Programming Language :: Python :: 3',
         'Intended Audience :: Developers',
@@ -29,12 +31,17 @@ setuptools.setup(
     ],
 
     keywords=[
-        # eg: 'keyword1', 'keyword2', 'keyword3',
+        'MPI', 'containers', 'singularity',
     ],
+    # include_package_data=True, # package includes all files of the package directory
+    zip_safe=False,
+    install_requires=[],
+    python_requires='>=3',
+
     packages=['swrap'],
     package_dir={'': 'src'},
     entry_points={
-        'console_scripts': ['smpiexec=swrap.smpiexec:main', ]
+        'console_scripts': ['smpiexec=swrap.smpiexec:main']
     }
 )
 
@@ -42,21 +49,4 @@ setuptools.setup(
 
         
 
-
-setuptools.setup(
-    name='bgem',
-    version=__version__,
-
-    include_package_data=True,
-    zip_safe=False,
-    install_requires=['numpy>=1.13.4', 'pandas', 'scipy', 'bih', 'gmsh>=4.10.4'],
-    python_requires='>=3',
-    entry_points={
-        'console_scripts': [
-            'smpiexec = swrap.smpiexec:main',
-        ]
-    }
-)
-        
-        
         
