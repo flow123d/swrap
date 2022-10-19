@@ -165,7 +165,7 @@ class Run:
             # base name of the pbs_script (and workdir possibly)
             image='docker://flow123d/geomop-gnu:2.0.0',
             # image to run in
-            wrapper='smpiexec.py',
+            wrapper='smpiexec',
             # wrapper to test, currently just mpiexec
             # located in src/swrap folder
             pbs_select=1,
