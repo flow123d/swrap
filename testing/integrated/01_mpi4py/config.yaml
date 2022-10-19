@@ -34,7 +34,10 @@ cases:
       # for mpiexec see: https://www.open-mpi.org/doc/v3.0/man1/mpiexec.1.php
       pbs_select: 2
       
-    - name: script
-      command: -n 4 python3 script.py
+    - name: simple
+      command: -n 4 python3 simple.py
       pbs_select: 2:ncpus=2
-        
+
+    - name: error_in_process
+      command: -n 4 python3 error_in_process.py
+      pbs_select: 2:ncpus=2
