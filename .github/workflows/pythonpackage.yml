@@ -47,6 +47,6 @@ jobs:
         sshpass -e ssh ${opt} ${{secrets.CHARON_USER_FRONTEND}} \
         "cd _testing; rm -rf swrap; git clone -b ${BRANCH} https://github.com/flow123d/swrap.git; \
         pip install --user .; \
-        cd swrap/testing/integrated; python3 run_test.py 01_mpi4py"
+        cd swrap/integrated; python3 run_test.py 01_mpi4py"
 
     
