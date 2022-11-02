@@ -6,7 +6,9 @@ import subprocess
 
 from argparse import RawTextHelpFormatter
 
-from swrap.tools import flush_print, oscommand, create_ssh_agent, create_known_hosts_file
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+
+from tools import flush_print, oscommand, create_ssh_agent, create_known_hosts_file
 
 
 def arguments():
@@ -158,7 +160,8 @@ def main():
       else:
         bindings_in_launcher = bindings_in_launcher + "," + scratch_dir_path
 
-    sing_command = ' '.join(['singularity', 'exec', bindings, image])
+    sing_command_list = ['singularity', 'exec', bindings, image]
+    sing_command = ' '.join(sing_command_list)
     sing_command_in_launcher = ' '.join(['singularity', 'exec', bindings_in_launcher, image])
 
     flush_print('sing_command:', sing_command)
@@ -195,10 +198,10 @@ def main():
     #     raise Exception("mpiexec path '" + mpiexec_path + "' not found in container!")
 
     # D] join mpiexec arguments
-    mpiexec_args = " ".join([mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path])
+    mpiexec_args = [mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path]
 
     # F] join all the arguments into final singularity container command
-    final_command_list = [sing_command, mpiexec_args, *prog_args]
+    final_command_list = [*sing_command_list, *mpiexec_args, *prog_args]
 
     ###################################################################################################################
     # Final call.

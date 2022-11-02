@@ -1,7 +1,7 @@
 common:    # these fields are used in every case    
     image: docker://flow123d/geomop-gnu:2.0.0
     # image to run in 
-    wrapper: smpiexec
+    wrapper: smpiexec.py
     # wrapper to test, currently just mpiexec
     
     #####
@@ -41,3 +41,6 @@ cases:
     - name: error_in_process
       command: -n 4 python3 error_in_process.py
       pbs_select: 2:ncpus=2
+      checkers:
+        check_return_code: 1
+        check_find_stdout_regex: ZeroDivisionError
