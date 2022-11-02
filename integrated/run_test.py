@@ -312,14 +312,16 @@ class Run:
         if err_msg is None:
             result = "Succeed:"
             err_msg = ""
+            success = True
         else:
             if self.state.timeout:
                 result = "Timed out:"
             else:
                 result = "Failed:"
             err_msg = f"{err_msg}\n{self.state.get_output()}"
+            success = False
         msg = f"[{self.id}] {result} {self.short_id}, {self.pbs_script}: {self.config['command']} \n{err_msg}"
-        self.queue.put((self.id, msg, True if err_msg is None else False))
+        self.queue.put((self.id, msg, success))
 
 
 def report(print_queue):
