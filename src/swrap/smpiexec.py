@@ -23,7 +23,11 @@ def arguments():
                         help='comma separated list of paths to be bind to Singularity container')
     parser.add_argument('-m', '--mpiexec', type=str, metavar="PATH", default="", required=False,
                         help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
-    parser.add_argument('-s', '--scratch_copy', type=str, metavar="PATH", default="", required=False,
+    parser.add_argument('-s', '--scratch_dir', type=str, metavar="PATH", default="", required=False,
+                        help='''
+                        directory path, where SCRATCHDIR is, overwrite SCRATCHDIR from environment;
+                        ''')
+    parser.add_argument('-c', '--scratch_copy', type=str, metavar="PATH", default="", required=False,
                         help='''
                         directory path, its content will be copied to SCRATCHDIR;
                         ''')
@@ -101,8 +105,11 @@ def main():
     flush_print("assembling final command...")
 
     scratch_dir_path = None
-    if 'SCRATCHDIR' in os.environ:
+    if args.scratch_dir:
+        scratch_dir_path = args.scratch_dir
+    elif 'SCRATCHDIR' in os.environ:
         scratch_dir_path = os.environ['SCRATCHDIR']
+    if scratch_dir_path:
         flush_print("Using SCRATCHDIR:", scratch_dir_path)
 
         flush_print("copying to SCRATCHDIR on all nodes...")
