@@ -1,0 +1,35 @@
+- test that smpiexec.py fails for failing commad (correct return code)
+- report every executed 'run' with clear result status
+- name substituted pbs script by hash of the arguments, list arguments and created script 
+
+uprava job.sh
+cesta k smpiexec.sh
+image: docker://flow123d/geomop-gnu:2.0.0
+
+Necessary tests:
+- start N MPI processes of single app, running for given time; 
+  any computation that involves both bandwith and latency communication:
+  e.g. extension of 01 test:
+  - every proc generates random numbers from seed of the hash of its rank
+  - every proc R send given size of random numbers to procs R+1, R+2 modulo N (using isend, irecv)
+  - every proc sum own and recieved numbers (modulo some big number, e.g. 275,604,541)
+  - sum colectively using reduce_scatter
+  - iterate this given number (determine approximate time of single iteration should be about 1s)
+  - report results of every iteration to stdout; every process format: [<rank>] <number>
+  
+  Test goals: simple MPI app, test longterm robustness of the single run
+  
+- start vector of applications with given number of processes, and given time for every application
+  extension of previous, but just add application specific number to the rank before intitioal hash
+
+  Test goals: more complex initial setting robustness of the long run
+  
+- test mpi app of 3 nodes with failure of given node
+
+  Test goals: 
+  check correct end of the calculation, 
+  check proper reporting of the error  (which node, propagated stdoutput)
+  check nonzero exit code´
+
+
+        
