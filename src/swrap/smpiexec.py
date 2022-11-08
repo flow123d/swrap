@@ -92,7 +92,7 @@ def main():
         shutil.copy(orig_node_file, node_file)
         # mprint(os.popen("ls -l").read())
 
-    node_names = create_known_hosts_file(script_dir, node_file, debug=debug)
+    node_names = create_known_hosts_file(current_dir, node_file, debug=debug)
 
     # mprint(os.environ)
     create_agent = 'SSH_AUTH_SOCK' not in os.environ
