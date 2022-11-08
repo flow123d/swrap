@@ -109,7 +109,7 @@ def main():
         scratch_dir_path = args.scratch_dir
     elif 'SCRATCHDIR' in os.environ:
         scratch_dir_path = os.environ['SCRATCHDIR']
-    if scratch_dir_path:
+    if scratch_dir_path and args.scratch_copy:
         flush_print("Using SCRATCHDIR:", scratch_dir_path)
 
         flush_print("copying to SCRATCHDIR on all nodes...")
@@ -213,7 +213,7 @@ def main():
     ###################################################################################################################
     # Final call.
     ###################################################################################################################
-    if scratch_dir_path:
+    if scratch_dir_path and args.scratch_copy:
       flush_print("Entering SCRATCHDIR:", scratch_dir_path)
       os.chdir(scratch_dir_path)
 
@@ -223,7 +223,12 @@ def main():
     flush_print("=================== smpiexec.py END ===================")
     if not debug:
         flush_print("================== Program output START ==================")
-        proc = subprocess.run(final_command_list)
+        if scratch_dir_path:
+            sing_tmp = os.path.join(scratch_dir_path, "singularity_tmp")
+        else:
+            sing_tmp = os.path.join(os.environ['HOME'], "singularity_tmp")
+        os.makedirs(sing_tmp, exist_ok = True)
+        proc = subprocess.run(final_command_list, env={**os.environ, "SINGULARITY_TMPDIR": sing_tmp})
 
         flush_print("=================== Program output END ===================")
     exit(proc.returncode)

@@ -6,7 +6,7 @@ common:    # these fields are used in every case
     
     #####
     # PBS options see: https://wiki.metacentrum.cz/wiki/About_scheduling_system#How_to_set_number_of_nodes_and_processors
-    pbs_select: 1      
+    pbs_select: 1:mem=4gb:scratch_local=10gb
     # PBS select option: "-l select={pbs_select}"
     # syntax select=<chunk_spec> [+ <other chunk specs>]
     # <chunk spec> = <n chunks>[:ncpu=<n processes per chunk>][:mem=<memory limit>][:scratch_<type>=<size>]
@@ -32,15 +32,15 @@ cases:
       # used number of precesses must fit the scheduled number on PBS; see pbs_* keys
       # the host file is passed automaticaly
       # for mpiexec see: https://www.open-mpi.org/doc/v3.0/man1/mpiexec.1.php
-      pbs_select: 2
+      pbs_select: 2:mem=4gb:scratch_local=10gb
       
     - name: simple
       command: -n 4 python3 simple.py
-      pbs_select: 2:ncpus=2
+      pbs_select: 2:ncpus=2:mem=4gb:scratch_local=10gb
 
     - name: error_in_process
       command: -n 4 python3 error_in_process.py
-      pbs_select: 2:ncpus=2
+      pbs_select: 2:ncpus=2:mem=4gb:scratch_local=10gb
       checkers:
         check_return_code: 1
         check_find_stdout_regex: ZeroDivisionError
