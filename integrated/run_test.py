@@ -128,6 +128,14 @@ def check_return_code(state: JobState, ref_return_code: int) -> str:
         return f"Error: return code {state.return_code} != {ref_return_code}"
 
 
+def check_find_stdout_regex(state: JobState, regex: str) -> str:
+    """
+    Check if output contains regular expression.
+    """
+    if re.search(regex, state.get_output()) is None:
+        return f"Error: output don't contain regular expression: {regex}"
+
+
 # def as_list(x):
 #     if type(x) is list:
 #         return x
@@ -190,7 +198,7 @@ class Run:
 
         Run._counter += 1
         self.id = Run._counter
-        config['wrapper'] = os.path.join(test_script_dir, "../../src/swrap/", config['wrapper'])
+        config['wrapper'] = os.path.join(test_script_dir, "../src/swrap/", config['wrapper'])
         self.config = dict_merge(Run._default_config, config)
 
         self.checkers = [(get_check_fn(fn), normalize_args(args))  for fn, args in config['checkers'].items()]
@@ -290,8 +298,8 @@ class Run:
             time.sleep(10)
         err_msg = None
         for check_fn, args in self.checkers:
-            err_msh = check_fn(self.state, *args)
-            if err_msh is not None:
+            err_msg = check_fn(self.state, *args)
+            if err_msg is not None:
                 break
         self.summary(err_msg)
         print(f"[{self.id}] done")
@@ -304,27 +312,33 @@ class Run:
         if err_msg is None:
             result = "Succeed:"
             err_msg = ""
+            success = True
         else:
             if self.state.timeout:
                 result = "Timed out:"
             else:
                 result = "Failed:"
             err_msg = f"{err_msg}\n{self.state.get_output()}"
+            success = False
         msg = f"[{self.id}] {result} {self.short_id}, {self.pbs_script}: {self.config['command']} \n{err_msg}"
-        self.queue.put((self.id, msg))
-
+        self.queue.put((self.id, msg, success))
 
 
 def report(print_queue):
     messages = []
+    all_success = True
     while True:
         try:
             messages.append(print_queue.get_nowait())
             print_queue.task_done()
         except Empty:
             break
-    for id, msg in sorted(messages):
+    for id, msg, success in sorted(messages):
         print(msg)
+        if not success:
+            all_success = False
+    return all_success
+
 
 def parse_arguments():
     """
@@ -383,7 +397,10 @@ def main():
 
         for f in futures:
             print(f.result())
-        report(print_queue)
+        all_success = report(print_queue)
+        if not all_success:
+            exit(1)
+
 
 if __name__ == "__main__":
     main()

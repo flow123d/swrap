@@ -6,39 +6,10 @@ import subprocess
 
 from argparse import RawTextHelpFormatter
 
-def flush_print(*margs, **mkwargs):
-    print(*margs, file=sys.stdout, flush=True, **mkwargs)
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
-def oscommand(command_string):
-    flush_print(command_string)
-    flush_print(os.popen(command_string).read())
+from tools import flush_print, oscommand, create_ssh_agent, create_known_hosts_file
 
-def create_ssh_agent():
-    """
-    Setup ssh agent and set appropriate environment variables.
-    :return:
-    """
-    flush_print("creating ssh agent...")
-    p = subprocess.Popen('ssh-agent -s',
-                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         shell=True, universal_newlines=True)
-    outinfo, errinfo = p.communicate('ssh-agent cmd\n')
-    # print(outinfo)
-
-    lines = outinfo.split('\n')
-    for line in lines:
-        # trim leading and trailing whitespace
-        line = line.strip()
-        # ignore blank/empty lines
-        if not line:
-            continue
-        # break off the part before the semicolon
-        left, right = line.split(';', 1)
-        if '=' in left:
-            # get variable and value, put into os.environ
-            varname, varvalue = left.split('=', 1)
-            flush_print("setting variable from ssh-agent:", varname, "=", varvalue)
-            os.environ[varname] = varvalue
 
 def arguments():
     parser = argparse.ArgumentParser(
@@ -52,7 +23,11 @@ def arguments():
                         help='comma separated list of paths to be bind to Singularity container')
     parser.add_argument('-m', '--mpiexec', type=str, metavar="PATH", default="", required=False,
                         help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
-    parser.add_argument('-s', '--scratch_copy', type=str, metavar="PATH", default="", required=False,
+    parser.add_argument('-s', '--scratch_dir', type=str, metavar="PATH", default="", required=False,
+                        help='''
+                        directory path, where SCRATCHDIR is, overwrite SCRATCHDIR from environment;
+                        ''')
+    parser.add_argument('-c', '--scratch_copy', type=str, metavar="PATH", default="", required=False,
                         help='''
                         directory path, its content will be copied to SCRATCHDIR;
                         ''')
@@ -117,50 +92,7 @@ def main():
         shutil.copy(orig_node_file, node_file)
         # mprint(os.popen("ls -l").read())
 
-    # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
-    ssh_known_hosts_to_append = []
-    if debug:
-        # ssh_known_hosts_file = 'testing_known_hosts'
-        ssh_known_hosts_file = 'xxx/.ssh/testing_known_hosts'
-    else:
-        assert 'HOME' in os.environ
-        ssh_known_hosts_file = os.path.join(os.environ['HOME'], '.ssh/known_hosts')
-    
-    flush_print("host file name:", ssh_known_hosts_file)
-
-    ssh_known_hosts = []
-    if os.path.exists(ssh_known_hosts_file):
-        with open(ssh_known_hosts_file, 'r') as fp:
-            ssh_known_hosts = fp.readlines()
-    else:
-        flush_print("creating host file...")
-        dirname = os.path.dirname(ssh_known_hosts_file)
-        if not os.path.exists(dirname):
-            os.makedirs(dirname)
-
-    flush_print("reading host file...")
-    with open(node_file) as fp:
-        node_names_read = fp.read().splitlines()
-        # remove duplicates
-        node_names = list(dict.fromkeys(node_names_read))
-
-    flush_print("connecting nodes...")
-    for node in node_names:
-        # touch all the nodes, so that they are accessible also through container
-        os.popen('ssh ' + node + ' exit')
-        # add the nodes to known_hosts so the fingerprint verification is skipped later
-        # in shell just append # >> ~ /.ssh / known_hosts
-        # or sort by 3.column in shell: 'sort -k3 -u ~/.ssh/known_hosts' and rewrite
-        ssh_keys = os.popen('ssh-keyscan -H ' + node) .readlines()
-        ssh_keys = list((line for line in ssh_keys if not line.startswith('#')))
-        for sk in ssh_keys:
-            splits = sk.split(" ")
-            if not splits[2] in ssh_known_hosts:
-                ssh_known_hosts_to_append.append(sk)
-
-    flush_print("finishing host file...")
-    with open(ssh_known_hosts_file, 'a') as fp:
-        fp.writelines(ssh_known_hosts_to_append)
+    node_names = create_known_hosts_file(current_dir, node_file, debug=debug)
 
     # mprint(os.environ)
     create_agent = 'SSH_AUTH_SOCK' not in os.environ
@@ -179,8 +111,11 @@ def main():
     flush_print("assembling final command...")
 
     scratch_dir_path = None
-    if 'SCRATCHDIR' in os.environ:
+    if args.scratch_dir:
+        scratch_dir_path = args.scratch_dir
+    elif 'SCRATCHDIR' in os.environ:
         scratch_dir_path = os.environ['SCRATCHDIR']
+    if scratch_dir_path and args.scratch_copy:
         flush_print("Using SCRATCHDIR:", scratch_dir_path)
 
         flush_print("copying to SCRATCHDIR on all nodes...")
@@ -210,11 +145,11 @@ def main():
         for node in node_names:
             destination_name = username + "@" + node
             destination_path = destination_name + ':' + scratch_dir_path
-            command = ' '.join(['scp', source_tar_filepath, destination_path])
+            command = ' '.join(['scp', '-o', 'UserKnownHostsFile=known_hosts', source_tar_filepath, destination_path])
             oscommand(command)
 
             #command = ' '.join(['ssh', destination_name, 'cd', scratch_dir_path, '&&', 'tar --strip-components 1 -xf', source_tar_filepath, '-C /'])
-            command = ' '.join(['ssh', destination_name, '"cd', scratch_dir_path, '&&', 'tar -xf', source_tar_filename,
+            command = ' '.join(['ssh', '-o', 'UserKnownHostsFile=known_hosts', destination_name, '"cd', scratch_dir_path, '&&', 'tar -xf', source_tar_filename,
                                 '&&', 'rm ', source_tar_filename, '"'])
             oscommand(command)
 
@@ -238,7 +173,8 @@ def main():
       else:
         bindings_in_launcher = bindings_in_launcher + "," + scratch_dir_path
 
-    sing_command = ' '.join(['singularity', 'exec', bindings, image])
+    sing_command_list = ['singularity', 'exec', bindings, image]
+    sing_command = ' '.join(sing_command_list)
     sing_command_in_launcher = ' '.join(['singularity', 'exec', bindings_in_launcher, image])
 
     flush_print('sing_command:', sing_command)
@@ -286,15 +222,15 @@ def main():
     #     raise Exception("mpiexec path '" + mpiexec_path + "' not found in container!")
 
     # D] join mpiexec arguments
-    mpiexec_args = " ".join([mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path])
+    mpiexec_args = [mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path]
 
     # F] join all the arguments into final singularity container command
-    final_command_list = [sing_command, mpiexec_args, *prog_args]
+    final_command_list = [*sing_command_list, *mpiexec_args, *prog_args]
 
     ###################################################################################################################
     # Final call.
     ###################################################################################################################
-    if scratch_dir_path:
+    if scratch_dir_path and args.scratch_copy:
       flush_print("Entering SCRATCHDIR:", scratch_dir_path)
       os.chdir(scratch_dir_path)
 
@@ -304,7 +240,12 @@ def main():
     flush_print("=================== smpiexec.py END ===================")
     if not debug:
         flush_print("================== Program output START ==================")
-        proc = subprocess.run(final_command_list)
+        if scratch_dir_path:
+            sing_tmp = os.path.join(scratch_dir_path, "singularity_tmp")
+        else:
+            sing_tmp = os.path.join(os.environ['HOME'], "singularity_tmp")
+        os.makedirs(sing_tmp, exist_ok = True)
+        proc = subprocess.run(final_command_list, env={**os.environ, "SINGULARITY_TMPDIR": sing_tmp})
 
         flush_print("=================== Program output END ===================")
     exit(proc.returncode)
