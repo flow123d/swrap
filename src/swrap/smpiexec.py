@@ -152,7 +152,7 @@ def main():
         sexec.oscommand(final_command)
 
         flush_print("=================== Program output END ===================")
-    exit(proc.returncode)
+    # exit(proc.returncode)
 
 if __name__ == "__main__":
     main()
