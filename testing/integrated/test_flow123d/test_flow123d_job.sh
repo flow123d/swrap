@@ -4,7 +4,7 @@
 #PBS -l place=scatter
 #PBS -l walltime=00:01:00
 #PBS -q charon_2h
-#PBS -N sing_flow_test
+#PBS -N swrap_flow_test
 #PBS -j oe
 
 set -x
@@ -18,7 +18,7 @@ pwd
 
 # collect arguments:
 # singularity_exec_mpi script path
-SING_SCRIPT="../singularity_exec_mpi.py"
+SING_SCRIPT="$HOME/workspace/swrap/src/swrap/smpiexec.py"
 # singularity SIF image path (preferably create in advance)
 SING_FLOW="$HOME/workspace/flow123d_images/flow123d_geomop-gnu:2.0.0.sif"
 # SING_FLOW="$HOME/workspace/flow123d_images/flow123d_3.0.5_92f55e826.sif"
