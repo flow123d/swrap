@@ -154,6 +154,36 @@ def prepare_scratch_dir(scratch_source):
     oscommand(' '.join(['rm', source_tar_filename]))
 
 
+def prepare_mpiexec_launcher(pbs_job_aux_dir, pbs_job_id, sing_command_in_launcher):
+    flush_print("creating launcher script...")
+    launcher_path = os.path.join(pbs_job_aux_dir, "launcher_" + pbs_job_id + ".sh")
+    launcher_log = '| adddate >> ' + os.path.join(pbs_job_aux_dir, 'launcher_' + pbs_job_id + '.log')
+    # https://stackoverflow.com/questions/20572934/get-the-name-of-the-caller-script-in-bash-script
+    launcher_lines = [
+        '#!/bin/bash',
+        '\n',
+        'adddate() {',
+        '    awk \'{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush(); }\'',
+        '}\n',
+        'PARENT_COMMAND=$(ps -o args= $PPID)',
+        'echo "" ' + launcher_log,
+        'echo "parent call: $PARENT_COMMAND" ' + launcher_log,
+        'echo $(hostname) ' + launcher_log,
+        'echo $(pwd) ' + launcher_log,
+        'echo "\$@: $@" ' + launcher_log,
+        'echo "ssh parameters: $1 $2" ' + launcher_log,
+        'echo "launcher command: ${@:3}" ' + launcher_log,
+        'echo "singularity container: $SINGULARITY_NAME" ' + launcher_log,
+        '\n',
+        'ssh $1 $2 ' + sing_command_in_launcher + ' ${@:3}',
+        'echo "ssh exit status: " $? ' + launcher_log
+    ]
+    with open(launcher_path, 'w') as f:
+        f.write('\n'.join(launcher_lines))
+    oscommand('chmod +x ' + launcher_path)
+    return launcher_path
+
+
 def arguments():
     parser = argparse.ArgumentParser(
         description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.',
@@ -268,32 +298,7 @@ def main():
     flush_print('sing_command_in_ssh:', sing_command_in_launcher)
 
     # B] prepare node launcher script
-    flush_print("creating launcher script...")
-    launcher_path = os.path.join(pbs_job_aux_dir, "launcher_" + pbs_job_id + ".sh")
-    launcher_log = '| adddate >> ' + os.path.join(pbs_job_aux_dir, 'launcher_' + pbs_job_id + '.log')
-    # https://stackoverflow.com/questions/20572934/get-the-name-of-the-caller-script-in-bash-script
-    launcher_lines = [
-        '#!/bin/bash',
-        '\n',
-        'adddate() {',
-        '    awk \'{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush(); }\'',
-        '}\n',
-        'PARENT_COMMAND=$(ps -o args= $PPID)',
-        'echo "" ' + launcher_log,
-        'echo "parent call: $PARENT_COMMAND" ' + launcher_log,
-        'echo $(hostname) ' + launcher_log,
-        'echo $(pwd) ' + launcher_log,
-        'echo "\$@: $@" ' + launcher_log,
-        'echo "ssh parameters: $1 $2" ' + launcher_log,
-        'echo "launcher command: ${@:3}" ' + launcher_log,
-        'echo "singularity container: $SINGULARITY_NAME" ' + launcher_log,
-        '\n',
-        'ssh $1 $2 ' + sing_command_in_launcher + ' ${@:3}',
-        'echo "ssh exit status: " $? ' + launcher_log
-    ]
-    with open(launcher_path, 'w') as f:
-        f.write('\n'.join(launcher_lines))
-    oscommand('chmod +x ' + launcher_path)
+    launcher_path = prepare_mpiexec_launcher(pbs_job_aux_dir, pbs_job_id, sing_command_in_launcher)
 
     # C] set mpiexec path inside the container
     # if container path to mpiexec is provided, use it
