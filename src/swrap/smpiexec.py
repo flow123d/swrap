@@ -16,21 +16,21 @@ def oscommand(command_string):
     flush_print(os.popen(command_string).read())
 
 
-def process_image_name(name):
-    if os.path.isfile(name):
-        image = os.path.abspath(args.image)
-    elif args.image.startswith('docker://'):
-        image = args.image
+def process_image_path(image_path):
+    if os.path.isfile(image_path):
+        image = os.path.abspath(image_path)
+    elif image_path.startswith('docker://'):
+        image = image_path
     else:
-        raise Exception("Invalid image: not a file nor docker hub link: " + args.image)
+        raise Exception("Invalid image: not a file nor docker hub link: " + image_path)
     return image
 
 
-def copy_and_read_node_file(orig_node_file):
+def copy_and_read_node_file(orig_node_file, directory):
     flush_print("reading host file...")
 
     # create a copy
-    node_file = os.path.join(pbs_job_aux_dir, os.path.basename(orig_node_file))
+    node_file = os.path.join(directory, os.path.basename(orig_node_file))
     shutil.copy(orig_node_file, node_file)
     # mprint(os.popen("ls -l").read())
 
@@ -79,7 +79,7 @@ def create_ssh_agent():
     assert os.environ['SSH_AUTH_SOCK'] != ""
 
 
-def process_known_hosts_file(ssh_known_hosts_file):
+def process_known_hosts_file(ssh_known_hosts_file, node_names):
     flush_print("host file name:", ssh_known_hosts_file)
 
     ssh_known_hosts = []
