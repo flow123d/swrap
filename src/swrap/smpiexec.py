@@ -26,6 +26,22 @@ def process_image_name(name):
     return image
 
 
+def copy_and_read_node_file(orig_node_file):
+    flush_print("reading host file...")
+
+    # create a copy
+    node_file = os.path.join(pbs_job_aux_dir, os.path.basename(orig_node_file))
+    shutil.copy(orig_node_file, node_file)
+    # mprint(os.popen("ls -l").read())
+
+    # read node names
+    with open(node_file) as fp:
+        node_names_read = fp.read().splitlines()
+        # remove duplicates
+        node_names = list(dict.fromkeys(node_names_read))
+        return node_file, node_names
+
+
 def create_ssh_agent():
     """
     Setup ssh agent and set appropriate environment variables.
@@ -59,6 +75,40 @@ def create_ssh_agent():
             flush_print("setting variable from ssh-agent:", varname, "=", varvalue)
             os.environ[varname] = varvalue
 
+    assert 'SSH_AUTH_SOCK' in os.environ
+    assert os.environ['SSH_AUTH_SOCK'] != ""
+
+
+def process_known_hosts_file(ssh_known_hosts_file):
+    flush_print("host file name:", ssh_known_hosts_file)
+
+    ssh_known_hosts = []
+    if os.path.exists(ssh_known_hosts_file):
+        with open(ssh_known_hosts_file, 'r') as fp:
+            ssh_known_hosts = fp.readlines()
+    else:
+        flush_print("creating host file...")
+        dirname = os.path.dirname(ssh_known_hosts_file)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
+    flush_print("connecting nodes...")
+    for node in node_names:
+        # touch all the nodes, so that they are accessible also through container
+        os.popen('ssh ' + node + ' exit')
+        # add the nodes to known_hosts so the fingerprint verification is skipped later
+        # in shell just append # >> ~ /.ssh / known_hosts
+        # or sort by 3.column in shell: 'sort -k3 -u ~/.ssh/known_hosts' and rewrite
+        ssh_keys = os.popen('ssh-keyscan -H ' + node).readlines()
+        ssh_keys = list((line for line in ssh_keys if not line.startswith('#')))
+        for sk in ssh_keys:
+            splits = sk.split(" ")
+            if not splits[2] in ssh_known_hosts:
+                ssh_known_hosts_to_append.append(sk)
+
+    flush_print("finishing host file...")
+    with open(ssh_known_hosts_file, 'a') as fp:
+        fp.writelines(ssh_known_hosts_to_append)
 
 def arguments():
     parser = argparse.ArgumentParser(
@@ -124,13 +174,10 @@ def main():
     
     # get nodefile, copy it to local dir so that it can be passed into container mpiexec later
     if debug:
-        node_file = "testing_hostfile"
+        orig_node_file = "testing_hostfile"
     else:
-        flush_print("getting host file...")
         orig_node_file = os.environ['PBS_NODEFILE']
-        node_file = os.path.join(pbs_job_aux_dir, os.path.basename(orig_node_file))
-        shutil.copy(orig_node_file, node_file)
-        # mprint(os.popen("ls -l").read())
+    node_file, node_names = copy_and_read_node_file(orig_node_file)
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
@@ -140,47 +187,10 @@ def main():
     else:
         assert 'HOME' in os.environ
         ssh_known_hosts_file = os.path.join(os.environ['HOME'], '.ssh/known_hosts')
-    
-    flush_print("host file name:", ssh_known_hosts_file)
-
-    ssh_known_hosts = []
-    if os.path.exists(ssh_known_hosts_file):
-        with open(ssh_known_hosts_file, 'r') as fp:
-            ssh_known_hosts = fp.readlines()
-    else:
-        flush_print("creating host file...")
-        dirname = os.path.dirname(ssh_known_hosts_file)
-        if not os.path.exists(dirname):
-            os.makedirs(dirname)
-
-    flush_print("reading host file...")
-    with open(node_file) as fp:
-        node_names_read = fp.read().splitlines()
-        # remove duplicates
-        node_names = list(dict.fromkeys(node_names_read))
-
-    flush_print("connecting nodes...")
-    for node in node_names:
-        # touch all the nodes, so that they are accessible also through container
-        os.popen('ssh ' + node + ' exit')
-        # add the nodes to known_hosts so the fingerprint verification is skipped later
-        # in shell just append # >> ~ /.ssh / known_hosts
-        # or sort by 3.column in shell: 'sort -k3 -u ~/.ssh/known_hosts' and rewrite
-        ssh_keys = os.popen('ssh-keyscan -H ' + node) .readlines()
-        ssh_keys = list((line for line in ssh_keys if not line.startswith('#')))
-        for sk in ssh_keys:
-            splits = sk.split(" ")
-            if not splits[2] in ssh_known_hosts:
-                ssh_known_hosts_to_append.append(sk)
-
-    flush_print("finishing host file...")
-    with open(ssh_known_hosts_file, 'a') as fp:
-        fp.writelines(ssh_known_hosts_to_append)
+    process_known_hosts_file(ssh_known_hosts_file)
 
     # mprint(os.environ)
     create_ssh_agent()
-    assert 'SSH_AUTH_SOCK' in os.environ
-    assert os.environ['SSH_AUTH_SOCK'] != ""
 
     ###################################################################################################################
     # Create Singularity container commands.
