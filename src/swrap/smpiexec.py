@@ -16,6 +16,16 @@ def oscommand(command_string):
     flush_print(os.popen(command_string).read())
 
 
+def process_image_name(name):
+    if os.path.isfile(name):
+        image = os.path.abspath(args.image)
+    elif args.image.startswith('docker://'):
+        image = args.image
+    else:
+        raise Exception("Invalid image: not a file nor docker hub link: " + args.image)
+    return image
+
+
 def create_ssh_agent():
     """
     Setup ssh agent and set appropriate environment variables.
@@ -97,19 +107,14 @@ def main():
     prog_args = args.prog[1:]
 
     # get program and its arguments, set absolute path
-    if os.path.isfile(args.image):
-        image = os.path.abspath(args.image)
-    elif args.image.startswith('docker://'):
-        image = args.image
-    else:
-        raise Exception("Invalid image: not a file nor docker hub link: " + args.image)
-
-    flush_print("Hostname: ", os.popen('hostname').read())
-    # mprint("os.environ", os.environ)
+    image = process_image_name(args.image)
 
     ###################################################################################################################
     # Process node file and setup ssh access to given nodes.
     ###################################################################################################################
+
+    flush_print("Hostname: ", os.popen('hostname').read())
+    # mprint("os.environ", os.environ)
 
     pbs_job_id = os.environ['PBS_JOBID']
     flush_print("PBS job id: ", pbs_job_id)
