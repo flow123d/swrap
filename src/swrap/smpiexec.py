@@ -6,18 +6,27 @@ import subprocess
 
 from argparse import RawTextHelpFormatter
 
+
 def flush_print(*margs, **mkwargs):
     print(*margs, file=sys.stdout, flush=True, **mkwargs)
+
 
 def oscommand(command_string):
     flush_print(command_string)
     flush_print(os.popen(command_string).read())
+
 
 def create_ssh_agent():
     """
     Setup ssh agent and set appropriate environment variables.
     :return:
     """
+    create_agent = 'SSH_AUTH_SOCK' not in os.environ
+    if not create_agent:
+        create_agent = os.environ['SSH_AUTH_SOCK'] == ''
+    if not create_agent:
+        return
+
     flush_print("creating ssh agent...")
     p = subprocess.Popen('ssh-agent -s',
                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -163,12 +172,7 @@ def main():
         fp.writelines(ssh_known_hosts_to_append)
 
     # mprint(os.environ)
-    create_agent = 'SSH_AUTH_SOCK' not in os.environ
-    if not create_agent:
-        create_agent = os.environ['SSH_AUTH_SOCK'] == ''
-
-    if create_agent:
-        create_ssh_agent()
+    create_ssh_agent()
     assert 'SSH_AUTH_SOCK' in os.environ
     assert os.environ['SSH_AUTH_SOCK'] != ""
 
