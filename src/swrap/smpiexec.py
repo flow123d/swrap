@@ -49,6 +49,7 @@ def create_ssh_agent():
             flush_print("setting variable from ssh-agent:", varname, "=", varvalue)
             os.environ[varname] = varvalue
 
+
 def arguments():
     parser = argparse.ArgumentParser(
         description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.',
@@ -227,25 +228,23 @@ def main():
 
 
     # A] process bindings, exclude ssh agent in launcher bindings
-    bindings = "-B " + os.environ['SSH_AUTH_SOCK']
+    common_bindings = ["/etc/ssh/ssh_config", "/etc/ssh/ssh_known_hosts", "/etc/krb5.conf"]
+    bindings = [*common_bindings, os.environ['SSH_AUTH_SOCK']]
     # possibly add current dir to container bindings
     # bindings = bindings + "," + current_dir + ":" + current_dir
-    bindings_in_launcher = ""
+    bindings_in_launcher = [*common_bindings]
     if args.bind != "":
-        bindings = bindings + "," + args.bind
-        bindings_in_launcher = "-B " + args.bind
+        bindings.append(args.bind)
+        bindings_in_launcher.append(args.bind)
 
     if scratch_dir_path:
-      bindings = bindings + "," + scratch_dir_path
-      if args.bind == "":
-        bindings_in_launcher = "-B "+ scratch_dir_path
-      else:
-        bindings_in_launcher = bindings_in_launcher + "," + scratch_dir_path
+        bindings.append(scratch_dir_path)
+        bindings_in_launcher.append(scratch_dir_path)
 
-    sing_command = ' '.join(['singularity', 'exec', bindings, image])
-    sing_command_in_launcher = ' '.join(['singularity', 'exec', bindings_in_launcher, image])
+    sing_command = ['singularity', 'exec', '-B', ",".join(bindings), image]
+    sing_command_in_launcher = ' '.join(['singularity', 'exec', '-B', ",".join(bindings_in_launcher), image])
 
-    flush_print('sing_command:', sing_command)
+    flush_print('sing_command:', *sing_command)
     flush_print('sing_command_in_ssh:', sing_command_in_launcher)
 
     # B] prepare node launcher script
@@ -290,10 +289,10 @@ def main():
     #     raise Exception("mpiexec path '" + mpiexec_path + "' not found in container!")
 
     # D] join mpiexec arguments
-    mpiexec_args = " ".join([mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path])
+    mpiexec_args = [mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path]
 
     # F] join all the arguments into final singularity container command
-    final_command_list = [sing_command, mpiexec_args, *prog_args]
+    final_command_list = [*sing_command, *mpiexec_args, *prog_args]
 
     ###################################################################################################################
     # Final call.
@@ -304,7 +303,7 @@ def main():
 
     flush_print("current directory:", os.getcwd())
     # mprint(os.popen("ls -l").read())
-    flush_print("final command:")
+    flush_print("final command:", *final_command_list)
     flush_print("=================== smpiexec.py END ===================")
     if not debug:
         flush_print("================== Program output START ==================")
