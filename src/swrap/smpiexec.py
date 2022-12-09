@@ -110,6 +110,50 @@ def process_known_hosts_file(ssh_known_hosts_file, node_names):
     with open(ssh_known_hosts_file, 'a') as fp:
         fp.writelines(ssh_known_hosts_to_append)
 
+
+def prepare_scratch_dir(scratch_source):
+    scratch_dir_path = os.environ['SCRATCHDIR']
+    flush_print("Using SCRATCHDIR:", scratch_dir_path)
+
+    flush_print("copying to SCRATCHDIR on all nodes...")
+    username = os.environ['USER']
+    # get source files
+    source = None
+    if os.path.isdir(scratch_source):
+        # source = scratch_source + "/."
+        # paths = [os.path.join(scratch_source,fp) for fp in os.listdir(scratch_source)]
+        # source = ' '.join(paths)
+        source = scratch_source
+    else:
+        raise Exception("--scratch_copy argument is not a valid directory: " + scratch_source)
+        # with open(scratch_source) as fp:
+        #   paths = fp.read().splitlines()
+        #   source = ' '.join(paths)
+
+    if source is None or source is []:
+        flush_print(scratch_source, "is empty")
+
+    # create tar
+    source_tar_filename = 'scratch.tar'
+    source_tar_filepath = os.path.join(current_dir, source_tar_filename)
+    command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
+    oscommand(command)
+
+    for node in node_names:
+        destination_name = username + "@" + node
+        destination_path = destination_name + ':' + scratch_dir_path
+        command = ' '.join(['scp', source_tar_filepath, destination_path])
+        oscommand(command)
+
+        # command = ' '.join(['ssh', destination_name, 'cd', scratch_dir_path, '&&', 'tar --strip-components 1 -xf', source_tar_filepath, '-C /'])
+        command = ' '.join(['ssh', destination_name, '"cd', scratch_dir_path, '&&', 'tar -xf', source_tar_filename,
+                            '&&', 'rm ', source_tar_filename, '"'])
+        oscommand(command)
+
+    # remove the scratch tar
+    oscommand(' '.join(['rm', source_tar_filename]))
+
+
 def arguments():
     parser = argparse.ArgumentParser(
         description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.',
@@ -157,7 +201,7 @@ def main():
     prog_args = args.prog[1:]
 
     # get program and its arguments, set absolute path
-    image = process_image_name(args.image)
+    image = process_image_path(args.image)
 
     ###################################################################################################################
     # Process node file and setup ssh access to given nodes.
@@ -177,7 +221,7 @@ def main():
         orig_node_file = "testing_hostfile"
     else:
         orig_node_file = os.environ['PBS_NODEFILE']
-    node_file, node_names = copy_and_read_node_file(orig_node_file)
+    node_file, node_names = copy_and_read_node_file(orig_node_file, pbs_job_aux_dir)
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
@@ -200,46 +244,7 @@ def main():
 
     scratch_dir_path = None
     if 'SCRATCHDIR' in os.environ:
-        scratch_dir_path = os.environ['SCRATCHDIR']
-        flush_print("Using SCRATCHDIR:", scratch_dir_path)
-
-        flush_print("copying to SCRATCHDIR on all nodes...")
-        username = os.environ['USER']
-        # get source files
-        source = None
-        if os.path.isdir(args.scratch_copy):
-            # source = args.scratch_copy + "/."
-            # paths = [os.path.join(args.scratch_copy,fp) for fp in os.listdir(args.scratch_copy)]
-            # source = ' '.join(paths)
-            source = args.scratch_copy
-        else:
-            raise Exception("--scratch_copy argument is not a valid directory: " + args.scratch_copy)
-            # with open(args.scratch_copy) as fp:
-            #   paths = fp.read().splitlines()
-            #   source = ' '.join(paths)
-
-        if source is None or source is []:
-            flush_print(args.scratch_copy, "is empty")
-
-        # create tar
-        source_tar_filename = 'scratch.tar'
-        source_tar_filepath = os.path.join(current_dir, source_tar_filename)
-        command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
-        oscommand(command)
-
-        for node in node_names:
-            destination_name = username + "@" + node
-            destination_path = destination_name + ':' + scratch_dir_path
-            command = ' '.join(['scp', source_tar_filepath, destination_path])
-            oscommand(command)
-
-            #command = ' '.join(['ssh', destination_name, 'cd', scratch_dir_path, '&&', 'tar --strip-components 1 -xf', source_tar_filepath, '-C /'])
-            command = ' '.join(['ssh', destination_name, '"cd', scratch_dir_path, '&&', 'tar -xf', source_tar_filename,
-                                '&&', 'rm ', source_tar_filename, '"'])
-            oscommand(command)
-
-        # remove the scratch tar
-        oscommand(' '.join(['rm', source_tar_filename]))
+        scratch_dir_path = prepare_scratch_dir(args.scratch_copy)
 
 
     # A] process bindings, exclude ssh agent in launcher bindings
