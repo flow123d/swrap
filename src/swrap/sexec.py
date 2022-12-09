@@ -93,6 +93,7 @@ def process_known_hosts_file(ssh_known_hosts_file, node_names):
             os.makedirs(dirname)
 
     flush_print("connecting nodes...")
+    ssh_known_hosts_to_append = []
     for node in node_names:
         # touch all the nodes, so that they are accessible also through container
         os.popen('ssh ' + node + ' exit')
@@ -111,7 +112,7 @@ def process_known_hosts_file(ssh_known_hosts_file, node_names):
         fp.writelines(ssh_known_hosts_to_append)
 
 
-def prepare_scratch_dir(scratch_source):
+def prepare_scratch_dir(scratch_source, node_names):
     scratch_dir_path = os.environ['SCRATCHDIR']
     flush_print("Using SCRATCHDIR:", scratch_dir_path)
 
@@ -134,6 +135,7 @@ def prepare_scratch_dir(scratch_source):
         flush_print(scratch_source, "is empty")
 
     # create tar
+    current_dir = os.getcwd()
     source_tar_filename = 'scratch.tar'
     source_tar_filepath = os.path.join(current_dir, source_tar_filename)
     command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
@@ -152,6 +154,7 @@ def prepare_scratch_dir(scratch_source):
 
     # remove the scratch tar
     oscommand(' '.join(['rm', source_tar_filename]))
+    return scratch_dir_path
 
 
 def arguments():
@@ -231,7 +234,7 @@ def main():
     else:
         assert 'HOME' in os.environ
         ssh_known_hosts_file = os.path.join(os.environ['HOME'], '.ssh/known_hosts')
-    process_known_hosts_file(ssh_known_hosts_file)
+    process_known_hosts_file(ssh_known_hosts_file, node_names)
 
     # mprint(os.environ)
     create_ssh_agent()
@@ -244,7 +247,7 @@ def main():
 
     scratch_dir_path = None
     if 'SCRATCHDIR' in os.environ:
-        scratch_dir_path = prepare_scratch_dir(args.scratch_copy)
+        scratch_dir_path = prepare_scratch_dir(args.scratch_copy, node_names)
 
 
     # A] process bindings, exclude ssh agent in launcher bindings

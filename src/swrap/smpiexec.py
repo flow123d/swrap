@@ -76,10 +76,10 @@ def main():
     else:
         assert 'HOME' in os.environ
         ssh_known_hosts_file = os.path.join(os.environ['HOME'], '.ssh/known_hosts')
-    sexec.process_known_hosts_file(ssh_known_hosts_file)
+    sexec.process_known_hosts_file(ssh_known_hosts_file, node_names)
 
     # mprint(os.environ)
-    sexec.sexec.create_ssh_agent()
+    sexec.create_ssh_agent()
 
     ###################################################################################################################
     # Create Singularity container commands.
@@ -89,7 +89,7 @@ def main():
 
     scratch_dir_path = None
     if 'SCRATCHDIR' in os.environ:
-        scratch_dir_path = sexec.prepare_scratch_dir(args.scratch_copy)
+        scratch_dir_path = sexec.prepare_scratch_dir(args.scratch_copy, node_names)
 
 
     # A] process bindings, exclude ssh agent in launcher bindings
