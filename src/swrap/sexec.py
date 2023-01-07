@@ -1,22 +1,15 @@
+from typing import *
 import os
-import sys
 import shutil
 import argparse
 import subprocess
+import attrs
 
-from argparse import RawTextHelpFormatter
-
-
-def flush_print(*margs, **mkwargs):
-    print(*margs, file=sys.stdout, flush=True, **mkwargs)
+from swrap.utils import flush_print, oscommand
+from . import pbs_utils
 
 
-def oscommand(command_string):
-    flush_print(command_string)
-    flush_print(os.popen(command_string).read())
-
-
-def process_image_path(image_path):
+def process_image_url(image_path: str) -> str:
     if os.path.isfile(image_path):
         image = os.path.abspath(image_path)
     elif image_path.startswith('docker://'):
@@ -24,6 +17,61 @@ def process_image_path(image_path):
     else:
         raise Exception("Invalid image: not a file nor docker hub link: " + image_path)
     return image
+
+
+@attrs.define
+class SingularityCall:
+    image: str = attrs.field(converter=process_image_url)
+    # singularity image url
+    command: List[str]
+    # command to call in the container with its arguments
+    bindings: List[str] = attrs.field(factory=list)
+    env_dict: Dict[str, str] = attrs.field(factory=dict)
+    append_path: List[str] = attrs.field(factory=list)
+    prepend_path: List[str] = attrs.field(factory=list)
+    debug: bool = False
+
+    def append_path(self, add_path):
+        append_path_list = self.env_dict.get('APPEND_PATH', "").split(":")
+        append_path_list.append(add_path)
+        append_path_list = ":".join(append_path_list)
+        self.env_dict['APPEND_PATH'] = append_path_list
+
+    def prepend_path(self, add_path):
+        append_path_list = self.env_dict.get('PREPEND_PATH', "").split(":")
+        append_path_list.insert(0, add_path)
+        append_path_list = ":".join(append_path_list)
+        self.env_dict['PREPEND_PATH'] = append_path_list
+
+    def form_bindings(self):
+        # currently we olny support binding of the same paths in host and in container
+        return self.bindings
+
+    def form_env_list(self):
+        return [f"{key}={str(value)}" for key, value in self.env_dict.items()]
+
+    def cmd_list(self):
+        sing_command = ['singularity', 'exec',
+                        '-B', ",".join(self.form_bindings()),
+                        '--env', ",".join(self.form_env_list()),
+                        self.image,
+                        *self.command]
+
+        # F] join all the arguments into final singularity container command
+        return  sing_command
+
+    def call(self):
+        flush_print("current directory:", os.getcwd())
+        # mprint(os.popen("ls -l").read())
+        flush_print("final command:", *self.cmd_list())
+        flush_print("=================== smpiexec.py END ===================")
+        if not self.debug:
+            flush_print("================== Program output START ==================")
+            # proc = subprocess.run(final_command_list)
+            final_command = " ".join(self.cmd_list())
+            oscommand(final_command)
+            flush_print("=================== Program output END ===================")
+        # exit(proc.returncode)
 
 
 def copy_and_read_node_file(orig_node_file, directory):
@@ -198,14 +246,8 @@ def main():
     current_dir = os.getcwd()
     args = arguments()
 
-    # get debug variable
-    debug = args.debug
-    # get program and its arguments
-    prog_args = args.prog[1:]
 
-    # get program and its arguments, set absolute path
-    image = process_image_path(args.image)
-
+    sing = SingularityCall(args.image, args.prog[1:], debug=args.debug)
     ###################################################################################################################
     # Process node file and setup ssh access to given nodes.
     ###################################################################################################################
@@ -218,9 +260,9 @@ def main():
     pbs_job_aux_dir =  os.path.join(current_dir, pbs_job_id + '_job')
     # create auxiliary job output directory
     os.makedirs(pbs_job_aux_dir, mode=0o775)
-    
+
     # get nodefile, copy it to local dir so that it can be passed into container mpiexec later
-    if debug:
+    if sing.debug:
         orig_node_file = "testing_hostfile"
     else:
         orig_node_file = os.environ['PBS_NODEFILE']
@@ -228,7 +270,7 @@ def main():
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
-    if debug:
+    if sing.debug:
         # ssh_known_hosts_file = 'testing_known_hosts'
         ssh_known_hosts_file = 'xxx/.ssh/testing_known_hosts'
     else:
@@ -252,21 +294,19 @@ def main():
 
     # A] process bindings, exclude ssh agent in launcher bindings
     common_bindings = ["/etc/ssh/ssh_config", "/etc/ssh/ssh_known_hosts", "/etc/krb5.conf"]
-    bindings = [*common_bindings, os.environ['SSH_AUTH_SOCK']]
+    sing.bindings.extend(common_bindings)
+    sing.bindings.append(os.environ['SSH_AUTH_SOCK'])
     # possibly add current dir to container bindings
     # bindings = bindings + "," + current_dir + ":" + current_dir
     if args.bind != "":
-        bindings.append(args.bind)
+        sing.bindings.append(args.bind)
 
     if scratch_dir_path:
-        bindings.append(scratch_dir_path)
+        sing.bindings.append(scratch_dir_path)
 
-    sing_command = ['singularity', 'exec', '-B', ",".join(bindings), image]
 
-    flush_print('sing_command:', *sing_command)
-
-    # F] join all the arguments into final singularity container command
-    final_command_list = [*sing_command, *prog_args]
+    pbs_utils.make_pbs_wrappers(pbs_job_aux_dir, sing.bindings)
+    sing.append_path(pbs_job_aux_dir)
 
     ###################################################################################################################
     # Final call.
@@ -275,18 +315,7 @@ def main():
       flush_print("Entering SCRATCHDIR:", scratch_dir_path)
       os.chdir(scratch_dir_path)
 
-    flush_print("current directory:", os.getcwd())
-    # mprint(os.popen("ls -l").read())
-    flush_print("final command:", *final_command_list)
-    flush_print("=================== smpiexec.py END ===================")
-    if not debug:
-        flush_print("================== Program output START ==================")
-        # proc = subprocess.run(final_command_list)
-        final_command = " ".join(final_command_list)
-        oscommand(final_command)
-
-        flush_print("=================== Program output END ===================")
-    # exit(proc.returncode)
+    sing.call()
 
 if __name__ == "__main__":
     main()

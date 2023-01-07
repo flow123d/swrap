@@ -2,7 +2,8 @@ import os
 import subprocess
 
 import sexec
-from sexec import flush_print
+import swrap.utils
+from swrap.utils import flush_print
 
 
 def prepare_mpiexec_launcher(pbs_job_aux_dir, pbs_job_id, sing_command_in_launcher):
@@ -31,7 +32,7 @@ def prepare_mpiexec_launcher(pbs_job_aux_dir, pbs_job_id, sing_command_in_launch
     ]
     with open(launcher_path, 'w') as f:
         f.write('\n'.join(launcher_lines))
-    sexec.oscommand('chmod +x ' + launcher_path)
+    swrap.utils.oscommand('chmod +x ' + launcher_path)
     return launcher_path
 
 
@@ -149,7 +150,7 @@ def main():
         flush_print("================== Program output START ==================")
         # proc = subprocess.run(final_command_list)
         final_command = " ".join(final_command_list)
-        sexec.oscommand(final_command)
+        swrap.utils.oscommand(final_command)
 
         flush_print("=================== Program output END ===================")
     # exit(proc.returncode)

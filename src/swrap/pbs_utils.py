@@ -1,9 +1,8 @@
 import os
 # import subprocess
 
-import sexec
-from sexec import flush_print
-
+from swrap.utils import flush_print, oscommand
+from pathlib import Path
 
 def run_in_ssh(arg_list, init_dir=None):
     """
@@ -47,3 +46,33 @@ def qsub(job_file, arg_list=None):
         return run_in_ssh(["qsub", job_file], init_dir=job_dir)
     else:
         return run_in_ssh(["qsub", *arg_list, job_file], init_dir=job_dir)
+
+
+def make_wrapper(dir, cmd, host_addr, binds):
+    bind_replace="""
+    PWD_REL="${{PWD#{1}}}"
+    if [ "$PWD_REL" != "$PWD" ]
+    then
+        PWD_HOST="{0}$PWD_REL"
+    fi
+    """
+    Path(dir).mkdir(parents=True, exist_ok=True)
+    pwd_replace_binds = [bind_replace.format(host_dir, cont_dir) for host_dir, cont_dir in binds.items()]
+    content=[
+        "# !/bin/bash",
+        "PWD=\"`pwd`\"",
+        "PWD_HOST=\"${PWD}\"",
+        *pwd_replace_binds,
+        f"ssh {host_addr} \"cd '$PWD_HOST'; {cmd} @*\""
+    ]
+    cmd_path = os.path.join(dir, cmd)
+    with open(cmd_path, "w") as f:
+        f.write("\n".join(content))
+    os.chmod(cmd_path, 0o477)
+
+def make_pbs_wrappers(dir, binds):
+    host_addr = os.environ.get('PBS_O_HOST', None)
+    if host_addr is None:
+        host_addr = oscommand('hostname')
+    make_wrapper(dir, 'qstat', host_addr, binds)
+    make_wrapper(dir, 'qsub', host_addr, binds)
