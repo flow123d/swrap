@@ -4,9 +4,11 @@ import shutil
 import argparse
 import subprocess
 import attrs
+import socket
 
 from swrap.utils import flush_print, oscommand
 from . import pbs_utils
+
 
 
 def process_image_url(image_path: str) -> str:
@@ -27,8 +29,6 @@ class SingularityCall:
     # command to call in the container with its arguments
     bindings: List[str] = attrs.field(factory=list)
     env_dict: Dict[str, str] = attrs.field(factory=dict)
-    append_path: List[str] = attrs.field(factory=list)
-    prepend_path: List[str] = attrs.field(factory=list)
     debug: bool = False
 
     def append_path(self, add_path):
@@ -74,20 +74,27 @@ class SingularityCall:
         # exit(proc.returncode)
 
 
-def copy_and_read_node_file(orig_node_file, directory):
+def copy_and_read_node_file(directory):
+    orig_node_file = os.environ.get('PBS_NODEFILE', None)
+    if orig_node_file is None:
+        node_file = os.path.join(directory, "nodefile")
+        hostname = socket.gethostname()
+        flush_print(f"Warning: missing PBS_NODEFILE variable. Using just local node: {hostname}.")
+        with open(node_file, "w") as f:
+            f.write(hostname)    
+    else:
+        # create a copy
+        node_file = os.path.join(directory, os.path.basename(orig_node_file))
+        shutil.copy(orig_node_file, node_file)
+       
     flush_print("reading host file...")
-
-    # create a copy
-    node_file = os.path.join(directory, os.path.basename(orig_node_file))
-    shutil.copy(orig_node_file, node_file)
-    # mprint(os.popen("ls -l").read())
 
     # read node names
     with open(node_file) as fp:
         node_names_read = fp.read().splitlines()
         # remove duplicates
-        node_names = list(dict.fromkeys(node_names_read))
-        return node_file, node_names
+        node_names = list(set(node_names_read))
+    return node_file, node_names
 
 
 def create_ssh_agent():
@@ -161,7 +168,14 @@ def process_known_hosts_file(ssh_known_hosts_file, node_names):
 
 
 def prepare_scratch_dir(scratch_source, node_names):
-    scratch_dir_path = os.environ['SCRATCHDIR']
+    if scratch_source == "":
+        return os.getcwd()
+    
+    scratch_dir_path = os.environ.get('SCRATCHDIR', None)
+    if scratch_dir_path is None:
+        return os.getcwd()
+    
+    
     flush_print("Using SCRATCHDIR:", scratch_dir_path)
 
     flush_print("copying to SCRATCHDIR on all nodes...")
@@ -189,6 +203,7 @@ def prepare_scratch_dir(scratch_source, node_names):
     command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
     oscommand(command)
 
+    # copy to scratch dir on every used node through ssh
     for node in node_names:
         destination_name = username + "@" + node
         destination_path = destination_name + ':' + scratch_dir_path
@@ -241,32 +256,33 @@ def arguments():
     return args
 
 
+def setup_aux_dir():
+    current_dir = os.getcwd()
+    pbs_job_id = os.environ.get('PBS_JOBID', f"pid_{os.getpid()}")
+    flush_print("PBS job id: ", pbs_job_id)
+    pbs_job_aux_dir =  os.path.join(current_dir, pbs_job_id + '_job')
+    # create auxiliary job output directory
+    os.makedirs(pbs_job_aux_dir, mode=0o775)
+    return pbs_job_aux_dir
+    
+    
 def main():
     flush_print("================== smpiexec.py START ==================")
-    current_dir = os.getcwd()
     args = arguments()
 
 
-    sing = SingularityCall(args.image, args.prog[1:], debug=args.debug)
+    sing = SingularityCall(args.image, args.prog, debug=args.debug)
     ###################################################################################################################
     # Process node file and setup ssh access to given nodes.
     ###################################################################################################################
 
     flush_print("Hostname: ", os.popen('hostname').read())
     # mprint("os.environ", os.environ)
-
-    pbs_job_id = os.environ['PBS_JOBID']
-    flush_print("PBS job id: ", pbs_job_id)
-    pbs_job_aux_dir =  os.path.join(current_dir, pbs_job_id + '_job')
-    # create auxiliary job output directory
-    os.makedirs(pbs_job_aux_dir, mode=0o775)
+    pbs_job_aux_dir = setup_aux_dir()
 
     # get nodefile, copy it to local dir so that it can be passed into container mpiexec later
-    if sing.debug:
-        orig_node_file = "testing_hostfile"
-    else:
-        orig_node_file = os.environ['PBS_NODEFILE']
-    node_file, node_names = copy_and_read_node_file(orig_node_file, pbs_job_aux_dir)
+    node_file, node_names = copy_and_read_node_file(pbs_job_aux_dir)
+        
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
@@ -286,10 +302,7 @@ def main():
     ###################################################################################################################
 
     flush_print("assembling final command...")
-
-    scratch_dir_path = None
-    if 'SCRATCHDIR' in os.environ:
-        scratch_dir_path = prepare_scratch_dir(args.scratch_copy, node_names)
+    scratch_dir_path = prepare_scratch_dir(args.scratch_copy, node_names)
 
 
     # A] process bindings, exclude ssh agent in launcher bindings
