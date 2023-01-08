@@ -1,7 +1,7 @@
 import os
 # import subprocess
 
-from swrap.utils import flush_print, oscommand
+from utils import flush_print, oscommand
 from pathlib import Path
 
 def run_in_ssh(arg_list, init_dir=None):

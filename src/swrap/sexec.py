@@ -6,8 +6,8 @@ import subprocess
 #import attrs
 import socket
 
-from swrap.utils import flush_print, oscommand
-from . import pbs_utils
+from utils import flush_print, oscommand
+from pbs_utils import make_pbs_wrappers
 
 
 
@@ -22,7 +22,7 @@ def process_image_url(image_path: str) -> str:
 
 
 class SingularityCall:
-    def __init__(self.image, commad, debug=False):
+    def __init__(self, image, command, debug=False):
         self.image: str = process_image_url(image)
         # singularity image url
         self.command: List[str] = command
@@ -318,7 +318,7 @@ def main():
         sing.bindings.append(scratch_dir_path)
 
 
-    pbs_utils.make_pbs_wrappers(pbs_job_aux_dir, sing.bindings)
+    make_pbs_wrappers(pbs_job_aux_dir, sing.bindings)
     sing.append_path(pbs_job_aux_dir)
 
     ###################################################################################################################
