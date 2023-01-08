@@ -3,7 +3,7 @@ import os
 import shutil
 import argparse
 import subprocess
-import attrs
+#import attrs
 import socket
 
 from swrap.utils import flush_print, oscommand
@@ -21,15 +21,15 @@ def process_image_url(image_path: str) -> str:
     return image
 
 
-@attrs.define
 class SingularityCall:
-    image: str = attrs.field(converter=process_image_url)
-    # singularity image url
-    command: List[str]
-    # command to call in the container with its arguments
-    bindings: List[str] = attrs.field(factory=list)
-    env_dict: Dict[str, str] = attrs.field(factory=dict)
-    debug: bool = False
+    def __init__(self.image, commad, debug=False):
+        self.image: str = process_image_url(image)
+        # singularity image url
+        self.command: List[str] = command
+        # command to call in the container with its arguments
+        self.bindings: List[str] = []
+        self.env_dict: Dict[str, str] = {}
+        self.debug: bool = False
 
     def append_path(self, add_path):
         append_path_list = self.env_dict.get('APPEND_PATH', "").split(":")
