@@ -35,6 +35,28 @@ def prepare_mpiexec_launcher(pbs_job_aux_dir, pbs_job_id, sing_command_in_launch
     return launcher_path
 
 
+def prepare_mpiexec_runner(destination, mpiexec_path, node_file, launcher_path):
+    mpiexec_args = [mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path]
+    flush_print("creating mpiexec and mpirun wrappers...")
+    mpiexec_wrap = os.path.join(destination, "mpiexec")
+    mpirun_wrap = os.path.join(destination, "mpirun")
+    lines = [
+        '#!/bin/bash',
+        '\n',
+        #'PARENT_COMMAND=$(ps -o args= $PPID)',
+        #'echo "parent call: $PARENT_COMMAND" ',
+        'echo "\$@: $@"',
+        ' '.join(mpiexec_args) + ' $@',
+    ]
+    with open(mpiexec_wrap, 'w') as f:
+        f.write('\n'.join(lines))
+    with open(mpirun_wrap, 'w') as f:
+        f.write('\n'.join(lines))
+    sexec.oscommand('chmod +x ' + mpiexec_wrap)
+    sexec.oscommand('chmod +x ' + mpirun_wrap)
+    return mpiexec_args
+
+
 def main():
     flush_print("================== smpiexec.py START ==================")
     current_dir = os.getcwd()
@@ -129,7 +151,8 @@ def main():
     #     raise Exception("mpiexec path '" + mpiexec_path + "' not found in container!")
 
     # D] join mpiexec arguments
-    mpiexec_args = [mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path]
+    mpiexec_args = prepare_mpiexec_runner(scratch_dir_path, mpiexec_path, node_file, launcher_path)
+    # mpiexec_args = [mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path]
 
     # F] join all the arguments into final singularity container command
     final_command_list = [*sing_command, *mpiexec_args, *prog_args]
