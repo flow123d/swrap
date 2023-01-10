@@ -22,11 +22,12 @@ def process_image_url(image_path: str) -> str:
 
 
 class SingularityCall:
-    def __init__(self, image, command, debug=False):
+    def __init__(self, image, command, venv="", debug=False):
         self.image: str = process_image_url(image)
         # singularity image url
         self.command: List[str] = command
         # command to call in the container with its arguments
+        self.venv:str = os.path.abspath(venv) if venv else ""
         self.bindings: List[str] = []
         self.env_dict: Dict[str, str] = {}
         self.debug: bool = False
@@ -48,9 +49,12 @@ class SingularityCall:
         return self.bindings
 
     def form_env_list(self):
+        self.env_dict['SWRAP_SINGULARITY_VENV'] = self.venv
         return [f"{key}={str(value)}" for key, value in self.env_dict.items()]
 
     def cmd_list(self):
+        if len(self.venv) > 0:
+            self.prepend_path(os.path.join(os.path.abspath(self.venv), 'bin'))
         sing_command = ['singularity', 'exec',
                         '-B', ",".join(self.form_bindings()),
                         '--env', ",".join(self.form_env_list()),
@@ -221,15 +225,24 @@ def prepare_scratch_dir(scratch_source, node_names):
 
 
 def arguments():
-    parser = argparse.ArgumentParser(
-        description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.',
-        formatter_class=argparse.RawTextHelpFormatter)
+    description=\
+    """
+    Auxiliary executor for parallel programs running inside (Singularity) container under PBS.
+    
+    Provides some tools to start other jobs running in the same image:
+    1. wrapper sripts 'qsub' and 'qstat' are created in the job auxiliary directory
+    2. environment variables SINGULARITY_CONTAINER, SINGULARITY_BIND, SWRAP_SINGULARITY_VENV.
+    3. mpiexec ...
+    """
+    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-d', '--debug', action='store_true',
                         help='use testing files and print the final command')
     parser.add_argument('-i', '--image', type=str, required=True,
                         help='Singularity SIF image or Docker image (will be converted to SIF)')
     parser.add_argument('-B', '--bind', type=str, metavar="PATH,...", default="", required=False,
                         help='comma separated list of paths to be bind to Singularity container')
+    parser.add_argument('-e', '--venv', type=str, metavar="PATH", default="", required=False,
+                        help='If specified, the python virtual environment in PATH directory will be activated before given command.')
     parser.add_argument('-m', '--mpiexec', type=str, metavar="PATH", default="", required=False,
                         help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
     parser.add_argument('-s', '--scratch_copy', type=str, metavar="PATH", default="", required=False,
@@ -271,7 +284,7 @@ def main():
     args = arguments()
 
 
-    sing = SingularityCall(args.image, args.prog, debug=args.debug)
+    sing = SingularityCall(args.image, args.prog, args.venv, debug=args.debug)
     ###################################################################################################################
     # Process node file and setup ssh access to given nodes.
     ###################################################################################################################
