@@ -79,4 +79,4 @@ def make_pbs_wrappers(dir, binds):
     if host_addr is None:
         host_addr = oscommand('hostname')
     make_wrapper(dir, 'qstat', host_addr, binds)
-    make_wrapper(dir, 'qsub --', host_addr, binds)
+    make_wrapper(dir, 'qsub', host_addr, binds)
