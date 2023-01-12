@@ -37,11 +37,10 @@ setuptools.setup(
     zip_safe=False,
     install_requires=[],
     python_requires='>=3',
-
     packages=['swrap'],
     package_dir={'': 'src'},
     entry_points={
-        'console_scripts': ['smpiexec=swrap.smpiexec:main']
+        'console_scripts': ['sexec=swrap.sexec:main', 'smpiexec=swrap.smpiexec:main']
     }
 )
 
