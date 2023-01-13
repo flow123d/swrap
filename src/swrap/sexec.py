@@ -26,6 +26,7 @@ class SingularityCall:
         self.image: str = process_image_url(image)
         # singularity image url
         self.command: List[str] = command
+        print("command with args:", command)
         # command to call in the container with its arguments
         self.venv:str = os.path.abspath(venv) if venv else ""
         self.bindings: List[str] = []
@@ -72,23 +73,21 @@ class SingularityCall:
         if not self.debug:
             flush_print("================== Program output START ==================")
             # proc = subprocess.run(final_command_list)
-            final_command = " ".join(self.cmd_list())
-            oscommand(final_command)
+            oscommand(self.cmd_list())
             flush_print("=================== Program output END ===================")
         # exit(proc.returncode)
 
 
 def copy_and_read_node_file(directory):
+    node_file = os.path.join(directory, "nodefile")
     orig_node_file = os.environ.get('PBS_NODEFILE', None)
     if orig_node_file is None:
-        node_file = os.path.join(directory, "nodefile")
         hostname = socket.gethostname()
         flush_print(f"Warning: missing PBS_NODEFILE variable. Using just local node: {hostname}.")
         with open(node_file, "w") as f:
             f.write(hostname)    
     else:
         # create a copy
-        node_file = os.path.join(directory, os.path.basename(orig_node_file))
         shutil.copy(orig_node_file, node_file)
        
     flush_print("reading host file...")
@@ -204,23 +203,19 @@ def prepare_scratch_dir(scratch_source, node_names):
     current_dir = os.getcwd()
     source_tar_filename = 'scratch.tar'
     source_tar_filepath = os.path.join(current_dir, source_tar_filename)
-    command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
-    oscommand(command)
+    oscommand(['tar', '-cvf', source_tar_filepath], cwd=source)
 
     # copy to scratch dir on every used node through ssh
     for node in node_names:
         destination_name = username + "@" + node
         destination_path = destination_name + ':' + scratch_dir_path
-        command = ' '.join(['scp', source_tar_filepath, destination_path])
-        oscommand(command)
+        oscommand(['scp', source_tar_filepath, destination_path])
 
         # command = ' '.join(['ssh', destination_name, 'cd', scratch_dir_path, '&&', 'tar --strip-components 1 -xf', source_tar_filepath, '-C /'])
-        command = ' '.join(['ssh', destination_name, '"cd', scratch_dir_path, '&&', 'tar -xf', source_tar_filename,
-                            '&&', 'rm ', source_tar_filename, '"'])
-        oscommand(command)
+        oscommand(['ssh', destination_name, f'cd "{scratch_dir_path}" && tar -xf "{source_tar_filename}" && rm "source_tar_filename"'])
 
     # remove the scratch tar
-    oscommand(' '.join(['rm', source_tar_filename]))
+    oscommand(['rm', source_tar_filename])
     return scratch_dir_path
 
 
