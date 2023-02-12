@@ -21,6 +21,26 @@ def process_image_url(image_path: str) -> str:
     return image
 
 
+def cmd_call(args, **kwargs):
+    completed = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
+    if completed.returncode == 0:
+        if isinstance(completed.stdout, bytes):
+            return completed.stdout.decode('utf-8')
+        else:
+            assert isinstance(completed.stdout, str)
+            return completed.stdout
+    msg = [
+        f"Error in call: {args}",
+        f"Return code: {completed.returncode}",
+        "======== stdout",
+        str(completed.stdout),
+        "======== stderr",
+        str(completed.stderr)
+    ]
+    raise Exception("\n".join(msg))
+    
+    
+    
 class SingularityCall:
     def __init__(self, image, command, venv="", debug=False):
         self.image: str = process_image_url(image)
@@ -77,7 +97,6 @@ class SingularityCall:
             flush_print("=================== Program output END ===================")
         # exit(proc.returncode)
 
-
 def copy_and_read_node_file(directory):
     node_file = os.path.join(directory, "nodefile")
     orig_node_file = os.environ.get('PBS_NODEFILE', None)
@@ -112,11 +131,13 @@ def create_ssh_agent():
         return
 
     flush_print("creating ssh agent...")
-    p = subprocess.Popen('ssh-agent -s',
-                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         shell=True, universal_newlines=True)
-    outinfo, errinfo = p.communicate('ssh-agent cmd\n')
-    # print(outinfo)
+    #p = subprocess.Popen(,
+    #                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    #                     )
+    #outinfo, errinfo = p.communicate('ssh-agent cmd\n')
+    outinfo = cmd_call(['ssh-agent', '-s'], shell=True, universal_newlines=True)
+    #outinfo = cmd_call(['ssh-agent', '-s'])
+    flush_print(outinfo)
 
     lines = outinfo.split('\n')
     for line in lines:
@@ -154,15 +175,20 @@ def process_known_hosts_file(ssh_known_hosts_file, node_names):
     ssh_known_hosts_to_append = []
     for node in node_names:
         # touch all the nodes, so that they are accessible also through container
-        os.popen('ssh ' + node + ' exit')
+        #os.popen('ssh ' + node + ' exit')
+        out = cmd_call(['ssh', '-oPasswordAuthentication=no', 'charon24.nti.tul.cz', "echo", "OK"])
+        print("Test ssh connection: ", out)
         # add the nodes to known_hosts so the fingerprint verification is skipped later
         # in shell just append # >> ~ /.ssh / known_hosts
         # or sort by 3.column in shell: 'sort -k3 -u ~/.ssh/known_hosts' and rewrite
-        ssh_keys = os.popen('ssh-keyscan -H ' + node).readlines()
-        ssh_keys = list((line for line in ssh_keys if not line.startswith('#')))
+        #ssh_keys = os.popen('ssh-keyscan -H ' + node).readlines()
+        ssh_keys = cmd_call(['ssh-keyscan', '-H', node])
+        print("SSH_KEYS:\n", ssh_keys)
+        ssh_keys = [line for line in ssh_keys.split("\n") if not line.startswith('#') and line.strip() != ""]
+        print("SSH_KEYS:\n", ssh_keys)
         for sk in ssh_keys:
-            splits = sk.split(" ")
-            if not splits[2] in ssh_known_hosts:
+            host_hash, key_type, pubkey = sk.split(" ")
+            if not pubkey in ssh_known_hosts:
                 ssh_known_hosts_to_append.append(sk)
 
     flush_print("finishing host file...")
@@ -309,23 +335,19 @@ def main():
     # Create Singularity container commands.
     ###################################################################################################################
 
-    flush_print("assembling final command...")
     scratch_dir_path = prepare_scratch_dir(args.scratch_copy, node_names)
 
-
     # A] process bindings, exclude ssh agent in launcher bindings
-    common_bindings = ["/etc/ssh/ssh_config", "/etc/ssh/ssh_known_hosts", "/etc/krb5.conf"]
+    common_bindings = ["/etc/ssh/ssh_config", "/etc/ssh/ssh_known_hosts", "/etc/krb5.conf", "/etc/krb5.keytab", "/tmp"]
     sing.bindings.extend(common_bindings)
     sing.bindings.append(os.environ['SSH_AUTH_SOCK'])
     # possibly add current dir to container bindings
     # bindings = bindings + "," + current_dir + ":" + current_dir
     if args.bind != "":
         sing.bindings.append(args.bind)
-
     if scratch_dir_path:
         sing.bindings.append(scratch_dir_path)
-
-
+    
     make_pbs_wrappers(pbs_job_aux_dir, sing.bindings)
     sing.append_path(pbs_job_aux_dir)
 

@@ -51,8 +51,11 @@ def qsub(job_file, arg_list=None):
 
 
 def make_wrapper(dir, cmd, binds):
+    flush_print("assembling final command...5.1")
     host_addr = socket.gethostname()
+    flush_print("assembling final command...5.2")
     host_addr = host_addr.strip("\n")
+    flush_print("assembling final command...5.3")
     full_cmd = shutil.which(cmd)
     # full resolution of the cmd
     
@@ -67,11 +70,13 @@ def make_wrapper(dir, cmd, binds):
     #pwd_replace_binds = [bind_replace.format(host_dir, cont_dir) for host_dir, cont_dir in binds]
     # TODO: support bindings with path different on host and container
     
-    ssh_call=f'ssh {host_addr} "cd \'$PWD_HOST\'; {full_cmd} $@"'
+    # Forbid password authentication, alternative: -oBatchMode=yes 
+    ssh_call=f'ssh -v -oPasswordAuthentication=no {host_addr} "cd \'$PWD_HOST\'; {full_cmd} $@"'
     pwd_replace_binds=[]
     content=[
         "#!/bin/bash",
         "set -x",
+        "ls -l /tmp/krb*",
         "PWD=\"`pwd`\"",
         "PWD_HOST=\"${PWD}\"",
         *pwd_replace_binds,        
@@ -81,6 +86,7 @@ def make_wrapper(dir, cmd, binds):
     with open(wrapper_path, "w") as f:
         f.write("\n".join(content))
     os.chmod(wrapper_path, 0o777)
+    flush_print("assembling final command...5.4")
 
 def make_pbs_wrappers(dir, binds):
     #host_addr = os.environ.get('PBS_O_HOST', None)
