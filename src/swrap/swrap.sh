@@ -541,12 +541,20 @@ function call_docker() {
     fi
     
     local env_vars="-euid=$uid -egid=$gid -ewho=$uname -ehome=/mnt/$HOME"    
-    local host_workdir=`pwd`
-    local cont_workdir=${host_workdir#$HOME/*/}
-    local sub_home=${host_workdir%$cont_workdir}
-    local binds="-v/$HOME:/mnt/$HOME -v$sub_home:/"
-    docker run $env_vars ${CONT_ENV_LIST[@]/#/-e } $binds ${CONT_BIND_LIST[@]/#/-v} -w=${CONT_WORKDIR} $IMAGE_URL ${COMMAND_WITH_ARGS[@]}
+    #local host_workdir=`pwd`
+    #local rel_home="${host_workdir#$HOME/}"
+    #local home_first_subdir="${rel_home%%/*}"
+    #local abs_first_subdir="$HOME/$home_first_subdir"
     
+    local binds="-v$(pwd):$(pwd)"
+    # --rm  remove container after completion
+    # mount current dir (shuld include JOB_AUX_DIR) 
+    
+    # assert
+    [[ -d "$JOB_AUX_DIR" && "$JOB_AUX_DIR" = $(pwd)* ]] || error "JOB_AUX_DIR not subdir of PWD"
+    
+    
+    docker run --rm -u $(id -u):$(id -g) $env_vars ${CONT_ENV_LIST[@]/#/-e } $binds ${CONT_BIND_LIST[@]/#/-v} -w $(pwd) $IMAGE_URL "${COMMAND_WITH_ARGS[@]}"
 }
 
 
@@ -564,10 +572,8 @@ function call_singularity() {
 
 
 function call_container {
-    # TODO: have concept of work dir or where to place converted images, currently place them in .singularity default location
-    # communicate with metacentrum what is the best strategy
-    # 
-    # prefer to build them in tmp or in scratch dir
+    # We automaticaly bind:    
+    # - PWD (including JOB_AUX_DIR)
 
     
     if [ -x `command -v docker` ]; then
