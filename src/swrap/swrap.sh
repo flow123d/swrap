@@ -3,9 +3,21 @@
 # TODO: 
 # - debug output to given file, practical for wrapper (mpiexec, qsub, qstat) debugging, need suitable print function
 # 
+set -x
 
 # Default debug output.
 STDERR="/dev/stderr"
+
+# Global variables
+# DEBUG - path to the redirection of debug messages
+# IMAGE_URL
+
+function cleanup () {
+    [ -n "${JOB_AUX_DIR}" ] && rm -r ${JOB_AUX_DIR}
+}
+
+trap "cleanup" EXIT
+
 
 function arg_assignment_split() {
     RESULT_ARG=${1%=*}
@@ -26,10 +38,25 @@ function split_to_array () {
 }
 
 function error () {
-      echo -e "ERROR: $1"
-      exit 1
-
+    # Report error and exit.
+    # Usage: error "The error message"
+    
+    echo -e "ERROR: $1"
+    exit 1
 }
+
+function check_var () {
+    # Check that given var is nonempty (check global variables at beginning of a function.
+    varname=$1
+    [ -z "${!varname}" ] && error "Use of uninitialized var: $varname"
+}
+
+function check_indexed_array () {
+    # TODO: check indexed array type
+    varname=$1
+    [[ -v ${varname}[@] ]] && error "Use of uninitialized array: $varname"
+}
+
 
 function dbg () {
     if [ -n "$DEBUG" ]
@@ -38,7 +65,276 @@ function dbg () {
     fi
 }
 
+function dbgvar {
+    varname=$1
+    shift
+    dbg "$varname: '${!varname}'"
+}
 
+function dbgarray {
+    local varname=$1
+    local -n array="$varname"
+    args=""
+    for item in "${array[@]}"
+    do args+=" '$item'"
+    done
+    dbg "$varname:" $args
+}
+
+
+
+function print_usage() {
+cat << EOF
+  
+Usage:  
+  
+    Execute COMMAND under PBS:
+    endorse [-d[=PATH]] [-b=<path>] [-e=<var>] [-m=[<mpiexec>]] [-s=<workdir>]  <image_url> <command> [<options>]
+
+    
+Options:
+-d, --debug[=LOG_PATH] 
+    Output debug messages to stderr or to the file given by the LOG_PATH.  
+    
+-b, --bind=<BIND LIST>
+    Comma separated list of directory binds. Single bind format follows the Docker -v options, i.e.  host dir:container dir[options].
+
+-e, --env=<ENV LIST>
+    Comma separated list of the exported environment variables to introduce into the container environment.
+
+-m, --mpiexec[=MPIEXEC_PATH]
+    Creat a wrapper of mpiexec in the contiainer that manage lunching child mpi processes 
+    in the same container through the cals: SSH -> swrap -> container -> mpiexec.
+    Optionaly MPIEXEC_PATH provides path to the mpiexec in the container to use.
+    ? mpi host file
+
+-s, scratch_copy[=INPUT_DIR]
+    Every local process copy content of current directory or directory given by INPUT_DIR to the directory given by SCRATCHDIR
+    environment variable provided by PBS. Copy is done through 'scp' to caluculation nodes.
+    
+Used environment variables:
+
+PBS_JOBID
+PBS_NODEFILE
+SSH_KNOWNHOSTS
+
+    
+EOF
+
+# TODO direct run endorse_mlmc.py 
+
+}
+
+    
+function parse_arguments() {
+    while [ "${1#-}" != "$1" ]      # arg starts with '-'
+    do
+    arg_assignment_split "$1"       # produce $RESULT_ARG and $RESULT_VALUE
+    arg="$RESULT_ARG"
+    value="$RESULT_VALUE"
+    shift
+    case $arg in
+        -d|--debug)
+        DEBUG=${value:-$STDERR}
+        ;;  
+        -b|--bind)
+        split_to_array "," "$value"
+        CONT_BIND_LIST=( "${RESULT[@]}" )
+        # one item in docker-like format: host_dir:container_dir[:options]
+        ;;
+        -e|--env)
+        split_to_array "," "$value"
+        CONT_ENV_LIST=( "${RESULT[@]}" )
+        # contains exported variable names
+        ;;
+        -m|--mpiexec)
+        DEFAULT_MPIEXEC="mpiexec"
+        MPIEXEC=${value:-$DEFAULT_MPIEXEC}
+        ;;
+        -s|--scratch_copy)
+        SCRATCH_INPUT_DIR=${value:-`pwd`}    
+        ;;
+        -h|--help)
+        print_usage
+        exit 0
+        ;;
+        *)
+        print_usage
+        error "Invalid argument '$arg'"
+        ;;
+    esac
+    done
+    
+    if [ -z "$1" ]
+    then
+        print_usage
+        error "Missing image url."
+    fi
+    IMAGE_URL="$1"
+    shift
+    if [ -z "$1" ]
+    then
+        print_usage
+        error "Missing command."
+    fi
+    COMMAND_WITH_ARGS=("$@")
+}
+
+
+function read_pbs () {
+    # read PBS variables, proceed with defaults if running without PBS
+    PBS_JOBID=${PBS_JOBID:-"pid_$$"}    
+    dbg "PBS_JOBID: '$PBS_JOBID'"
+    
+    # read PBS_NODEFILE
+    declare -a NODE_NAMES
+    if [ -z "${PBS_NODEFILE}" ]; then
+        # default just local node
+        NODE_NAMES+=($(hostname))
+    else
+        readarray -t NODE_NAMES <${PBS_NODEFILE}
+    fi
+    dbg "NODE_NAMES list: ${NODE_NAMES[@]}"
+}
+
+function setup_aux_dir () {
+    # setup aux job dir
+    check_var PBS_JOBID
+    JOB_AUX_DIR="$(pwd)/${PBS_JOBID}_job"        
+    mkdir -p -m=775 "$JOB_AUX_DIR"    
+    
+}
+
+
+
+
+function ssh_batch () {
+    #no_strict_key_check=-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+    ssh -o BatchMode=yes "$@"
+}
+
+
+
+function update_ssh_known_hosts_file () {
+# def process_known_hosts_file(ssh_known_hosts_file, node_names):
+#     flush_print("host file name:", ssh_known_hosts_file)
+# 
+#     ssh_known_hosts = []
+#     if os.path.exists(ssh_known_hosts_file):
+#         with open(ssh_known_hosts_file, 'r') as fp:
+#             ssh_known_hosts = fp.readlines()
+#     else:
+#         flush_print("creating host file...")
+#         dirname = os.path.dirname(ssh_known_hosts_file)
+#         if not os.path.exists(dirname):
+#             os.makedirs(dirname)
+# 
+#     flush_print("connecting nodes...")
+#     ssh_known_hosts_to_append = []
+#     for node in node_names:
+#         # touch all the nodes, so that they are accessible also through container
+#         os.popen('ssh ' + node + ' exit')
+#         # add the nodes to known_hosts so the fingerprint verification is skipped later
+#         # in shell just append # >> ~ /.ssh / known_hosts
+#         # or sort by 3.column in shell: 'sort -k3 -u ~/.ssh/known_hosts' and rewrite
+#         ssh_keys = os.popen('ssh-keyscan -H ' + node).readlines()
+#         ssh_keys = list((line for line in ssh_keys if not line"".startswith('#')))
+#         for sk in ssh_keys:
+#             splits = sk.split(" ")
+#             if not splits[2] in ssh_known_hosts:
+#                 ssh_known_hosts_to_append.append(sk)
+# 
+#     flush_print("finishing host file...")
+#     with open(ssh_known_hosts_file, 'a') as fp:
+#         fp.writelines(ssh_known_hosts_to_append)
+
+
+    local ssh_knownhosts_file="${SSH_KNOWNHOSTS:-${HOME}/.ssh/known_hosts}"
+    check_indexed_array NODE_NAMES
+    if [ ! -f "$ssh_knownhosts_file" ]
+    then
+        # create default known_hosts file
+        mkdir -p "${ssh_knownhosts_file%/*}"
+        touch "${ssh_knownhosts_file}"
+    fi
+    
+    (
+        # lock file descriptor 
+        flock -w 30 223
+        cp "$ssh_knownhosts_file" ~/.ssh/_tmp_hosts
+        for node in "${NODE_NAMES[@]}";do
+            # touch all the nodes, so that they are accessible also through container
+            # TODO: should we do this in separate loop after updationg known_hosts ??
+            # point of thi is to fail early
+            ssh_batch $node exit
+            ssh-keyscan -H $node 2>&1  >> ~/.ssh/_tmp_hosts
+        done
+        sort -u ~/.ssh/_tmp_hosts >"$ssh_knownhosts_file"
+        rm ~/.ssh/_tmp_hosts
+    ) 223>${HOME}/.ssh/_swrap_lock
+}
+
+
+function create_ssh_agent () {
+# def create_ssh_agent():
+#     """
+#     Setup ssh agent and set appropriate environment variables.
+#     :return:
+#     """
+#     create_agent = 'SSH_AUTH_SOCK' not in os.environ
+#     if not create_agent:
+#         create_agent = os.environ['SSH_AUTH_SOCK'] == ''
+#     if not create_agent:
+#         return
+# 
+#     flush_print("creating ssh agent...")
+#     p = subprocess.Popen('ssh-agent -s',
+#                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+#                          shell=True, universal_newlines=True)
+#     outinfo, errinfo = p.communicate('ssh-agent cmd\n')
+#     # print(outinfo)
+# 
+#     lines = outinfo.split('\n')
+#     for line in lines:
+#         # trim leading and trailing whitespace
+#         line = line.strip()
+#         # ignore blank/empty lines
+#         if not line:
+#             continue
+#         # break off the part before the semicolon
+#         left, right = line.split(';', 1)
+#         if '=' in left:
+#             # get variable and value, put into os.environ
+#             varname, varvalue = left.split('=', 1)
+#             flush_print("setting variable from ssh-agent:", varname, "=", varvalue)
+#             os.environ[varname] = varvalue
+# 
+#     assert 'SSH_AUTH_SOCK' in os.environ
+#     assert os.environ['SSH_AUTH_SOCK'] != ""
+
+    if [ -z ${SSH_AUTH_SOCK} ]; then    
+        cmds=$(ssh-agent -s)
+        eval $cmds 
+    fi
+    
+    dbg "SSH_AUTH_SOCK: '${SSH_AUTH_SOCK}'"
+    dbg "SSH_AGENT_PID: '${SSH_AGENT_PID}'"
+}
+
+
+function make_wrapper () {
+    # TODO: for docker make transplation of PWD
+    # use a aux file with bindings, read it into associative array, lookup in it
+    cmd=$1
+    full_cmd=$(command -v $cmd)    
+    cat <<WRAPPER
+#!/bin/bash
+set -x
+#PWD="\$(pwd)"
+PWD_HOST="\`pwd\`"        
+ssh $HOST_ADDR "cd '$PWD_HOST'; $full_cmd \$@"
+WRAPPER
+}
 
 # 
 # def process_image_url(image_path: str) -> str:
@@ -108,96 +404,10 @@ function dbg () {
 #         # exit(proc.returncode)
 # 
 # 
-# def copy_and_read_node_file(directory):
-#     node_file = os.path.join(directory, "nodefile")
-#     orig_node_file = os.environ.get('PBS_NODEFILE', None)
-#     if orig_node_file is None:
-#         hostname = socket.gethostname()
-#         flush_print(f"Warning: missing PBS_NODEFILE variable. Using just local node: {hostname}.")
-#         with open(node_file, "w") as f:
-#             f.write(hostname)    
-#     else:
-#         # create a copy
-#         shutil.copy(orig_node_file, node_file)
-#        
-#     flush_print("reading host file...")
-# 
-#     # read node names
-#     with open(node_file) as fp:
-#         node_names_read = fp.read().splitlines()
-#         # remove duplicates
-#         node_names = list(set(node_names_read))
-#     return node_file, node_names
 # 
 # 
-# def create_ssh_agent():
-#     """
-#     Setup ssh agent and set appropriate environment variables.
-#     :return:
-#     """
-#     create_agent = 'SSH_AUTH_SOCK' not in os.environ
-#     if not create_agent:
-#         create_agent = os.environ['SSH_AUTH_SOCK'] == ''
-#     if not create_agent:
-#         return
-# 
-#     flush_print("creating ssh agent...")
-#     p = subprocess.Popen('ssh-agent -s',
-#                          stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-#                          shell=True, universal_newlines=True)
-#     outinfo, errinfo = p.communicate('ssh-agent cmd\n')
-#     # print(outinfo)
-# 
-#     lines = outinfo.split('\n')
-#     for line in lines:
-#         # trim leading and trailing whitespace
-#         line = line.strip()
-#         # ignore blank/empty lines
-#         if not line:
-#             continue
-#         # break off the part before the semicolon
-#         left, right = line.split(';', 1)
-#         if '=' in left:
-#             # get variable and value, put into os.environ
-#             varname, varvalue = left.split('=', 1)
-#             flush_print("setting variable from ssh-agent:", varname, "=", varvalue)
-#             os.environ[varname] = varvalue
-# 
-#     assert 'SSH_AUTH_SOCK' in os.environ
-#     assert os.environ['SSH_AUTH_SOCK'] != ""
 # 
 # 
-# def process_known_hosts_file(ssh_known_hosts_file, node_names):
-#     flush_print("host file name:", ssh_known_hosts_file)
-# 
-#     ssh_known_hosts = []
-#     if os.path.exists(ssh_known_hosts_file):
-#         with open(ssh_known_hosts_file, 'r') as fp:
-#             ssh_known_hosts = fp.readlines()
-#     else:
-#         flush_print("creating host file...")
-#         dirname = os.path.dirname(ssh_known_hosts_file)
-#         if not os.path.exists(dirname):
-#             os.makedirs(dirname)
-# 
-#     flush_print("connecting nodes...")
-#     ssh_known_hosts_to_append = []
-#     for node in node_names:
-#         # touch all the nodes, so that they are accessible also through container
-#         os.popen('ssh ' + node + ' exit')
-#         # add the nodes to known_hosts so the fingerprint verification is skipped later
-#         # in shell just append # >> ~ /.ssh / known_hosts
-#         # or sort by 3.column in shell: 'sort -k3 -u ~/.ssh/known_hosts' and rewrite
-#         ssh_keys = os.popen('ssh-keyscan -H ' + node).readlines()
-#         ssh_keys = list((line for line in ssh_keys if not line"".startswith('#')))
-#         for sk in ssh_keys:
-#             splits = sk.split(" ")
-#             if not splits[2] in ssh_known_hosts:
-#                 ssh_known_hosts_to_append.append(sk)
-# 
-#     flush_print("finishing host file...")
-#     with open(ssh_known_hosts_file, 'a') as fp:
-#         fp.writelines(ssh_known_hosts_to_append)
 # 
 # 
 # def prepare_scratch_dir(scratch_source, node_names):
@@ -250,148 +460,8 @@ function dbg () {
 
 
 
-function print_usage() {
-cat << EOF
-  
-Usage:  
-  
-    Execute COMMAND under PBS:
-    endorse [-d[=PATH]] [-b=<path>] [-e=<var>] [-m=[<mpiexec>]] [-s=<workdir>]  <image_url> <command> [<options>]
-
-    
-Options:
--d, --debug[=LOG_PATH] 
-    Output debug messages to stderr or to the file given by the LOG_PATH.  
-    
--b, --bind=<BIND LIST>
-    Comma separated list of directory binds. Single bind format follows the Docker -v options, i.e.  host dir:container dir[options].
-
--e, --env=<ENV LIST>
-    Comma separated list of the exported environment variables to introduce into the container environment.
-
--m, --mpiexec[=MPIEXEC_PATH]
-    Creat a wrapper of mpiexec in the contiainer that manage lunching child mpi processes 
-    in the same container through the cals: SSH -> swrap -> container -> mpiexec.
-    Optionaly MPIEXEC_PATH provides path to the mpiexec in the container to use.
-    ? mpi host file
-
--s, scratch_copy[=INPUT_DIR]
-    Every local process copy content of current directory or directory given by INPUT_DIR to the directory given by SCRATCHDIR
-    environment variable provided by PBS. Copy is done through 'scp' to caluculation nodes.
-    
-EOF
-
-# TODO direct run endorse_mlmc.py 
-
-}
-# 
-# def arguments():
-#     description=\
-#     """
-#     Auxiliary executor for parallel programs running inside (Singularity) container under PBS.
-#     
-#     Provides some tools to start other jobs running in the same image:
-#     1. wrapper sripts 'qsub' and 'qstat' are created in the job auxiliary directory
-#     2. environment variables SINGULARITY_CONTAINER, SINGULARITY_BIND, SWRAP_SINGULARITY_VENV.
-#     3. mpiexec ...
-#     """
-#     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawTextHelpFormatter)
-#     parser.add_argument('-d', '--debug', action='store_true',
-#                         help='use testing files and print the final command')
-#     parser.add_argument('-b', '--bind', type=str, metavar="PATH,...", default="", required=False,
-#                         help='comma separated list of paths to be bind to Singularity container')
-#     parser.add_argument('-e', '--venv', type=str, metavar="PATH", default="", required=False,
-#                         help='If specified, the python virtual environment in PATH directory will be activated before given command.')
-#     parser.add_argument('-m', '--mpiexec', type=str, metavar="PATH", default="", required=False,
-#                         help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
-#     parser.add_argument('-s', '--scratch_copy', type=str, metavar="PATH", default="", required=False,
-#                         help='''
-#                         directory path, its content will be copied to SCRATCHDIR;
-#                         ''')
-#     # if file path, each user defined path inside the file will be copied to SCRATCHDIR
-#     parser.add_argument('prog', nargs=argparse.REMAINDER,
-#                         help='''
-#                         mpiexec arguments and the executable, follow mpiexec doc:
-#                         "mpiexec args executable pgmargs [ : args executable pgmargs ... ]"
-# 
-#                         still can use MPMD (Multiple Program Multiple Data applications):
-#                         -n 4 program1 : -n 3 program2 : -n 2 program3 ...
-#                         ''')
-# 
-#     # create the parser for the "prog" command
-#     # parser_prog = parser.add_subparsers().add_parser('prog', help='program to be run and all its arguments')
-#     # parser_prog.add_argument('args', nargs="+", help="all arguments passed to 'prog'")
-# 
-#     # parser.print_help()
-#     # parser.print_usage()
-#     
-#     args = parser.parse_args()
-#     return args
-
-    
-function parse_arguments() {
-    while [ "${1#-}" != "$1" ]      # arg starts with '-'
-    do
-    arg_assignment_split "$1"       # produce $RESULT_ARG and $RESULT_VALUE
-    arg="$RESULT_ARG"
-    value="$RESULT_VALUE"
-    shift
-    case $arg in
-        -d|--debug)
-        DEBUG=${value:-$STDERR}
-        ;;  
-        -b|--bind)
-        split_to_array "," "$value"
-        CONT_BIND_LIST=( "${RESULT[@]}" )
-        # one item in docker-like format: host_dir:container_dir[:options]
-        ;;
-        -e|--env)
-        split_to_array "," "$value"
-        CONT_ENV_LIST=( "${RESULT[@]}" )
-        # contains exported variable names
-        ;;
-        -m|--mpiexec)
-        DEFAULT_MPIEXEC="mpiexec"
-        MPIEXEC=${value:-$DEFAULT_MPIEXEC}
-        ;;
-        -s|--scratch_copy)
-        SCRATCH_INPUT_DIR=${value:-`pwd`}    
-        ;;
-        -h|--help)
-        print_usage
-        exit 0
-        ;;
-        *)
-        print_usage
-        error "Invalid argument '$arg'"
-        ;;
-    esac
-    done
-    
-    if [ -z "$1" ]
-    then
-        print_usage
-        error "Missing image url."
-    fi
-    IMAGE_URL="$1"
-    shift
-    if [ -z "$1" ]
-    then
-        print_usage
-        error "Missing command."
-    fi
-    COMMAND_WITH_ARGS=("${@}")
-}
     
 #     
-# def setup_aux_dir():
-#     current_dir = os.getcwd()
-#     pbs_job_id = os.environ.get('PBS_JOBID', f"pid_{os.getpid()}")
-#     flush_print("PBS job id: ", pbs_job_id)
-#     pbs_job_aux_dir =  os.path.join(current_dir, pbs_job_id + '_job')
-#     # create auxiliary job output directory
-#     os.makedirs(pbs_job_aux_dir, mode=0o775)
-#     return pbs_job_aux_dir
 #     
 #     
 # def main():
@@ -461,17 +531,83 @@ function parse_arguments() {
 # if __name__ == "__main__":
 #     main()
 
+
+# TODO: add aux dir to path
+# ? mount users home ?
+
+function call_docker() {
+    if ! docker image inspect $IMAGE_URL &> /dev/null; then        
+        docker pull $IMAGE_URL
+    fi
     
+    local env_vars="-euid=$uid -egid=$gid -ewho=$uname -ehome=/mnt/$HOME"    
+    local host_workdir=`pwd`
+    local cont_workdir=${host_workdir#$HOME/*/}
+    local sub_home=${host_workdir%$cont_workdir}
+    local binds="-v/$HOME:/mnt/$HOME -v$sub_home:/"
+    docker run $env_vars ${CONT_ENV_LIST[@]/#/-e } $binds ${CONT_BIND_LIST[@]/#/-v} -w=${CONT_WORKDIR} $IMAGE_URL ${COMMAND_WITH_ARGS[@]}
+    
+}
+
+
+function call_singularity() {
+    # prepare singularity image: download, convert, (install) 
+    LOCAL_IMAGE="$ENDORSE_WORKSPACE/endorse_ci_${tag}.sif"
+    if [ ! -f $LOCAL_IMAGE ]
+    then
+        singularity build  $ENDORSE_IMAGE "docker://$IMAGE_URL"  
+    fi
+    
+    # call 
+    singularity exec ${CONT_ENV_LIST[@]/#/-e } $LOCAL_IMAGE ${COMMAND_WITH_ARGS[@]}
+}
+
+
+function call_container {
+    # TODO: have concept of work dir or where to place converted images, currently place them in .singularity default location
+    # communicate with metacentrum what is the best strategy
+    # 
+    # prefer to build them in tmp or in scratch dir
+
+    
+    if [ -x `command -v docker` ]; then
+        call_docker
+    elif [ -x `command -v singularity` ]; then            
+        call_singularity
+    else
+        error "No container tool. Not supported."
+    fi
+
+}
+
+
 # =================== MAIN
 
 WORKDIR=`pwd`
-parse_arguments $@
+parse_arguments "$@"
 
 # Report parsed arguments
-dbg "DEBUG: '$DEBUG'"
-dbg "CONT_BIND_LIST: ${CONT_BIND_LIST[@]}"
-dbg "CONT_ENV_LIST: ${CONT_ENV_LIST[@]}"
-dbg "MPIEXEC: '$MPIEXEC'"
-dbg "SCRATCH_INPUT_DIR: '$SCRATCH_INPUT_DIR'"
-dbg "IMAGE_URL: '$IMAGE_URL'"
-dbg "COMMAND: ${COMMAND_WITH_ARGS[@]}"
+dbgvar DEBUG
+dbgarray CONT_BIND_LIST
+dbgarray CONT_ENV_LIST
+dbgvar MPIEXEC
+dbgvar SCRATCH_INPUT_DIR
+dbgvar IMAGE_URL
+dbgarray COMMAND_WITH_ARGS
+
+
+# read PBS_JOBID and NODE_NAMES array
+read_pbs
+
+# set JOB_AUX_DIR, create aux dir
+setup_aux_dir
+
+update_ssh_known_hosts_file
+
+# export: SSH_AUTH_SOCK, SSH_AGENT_PID
+create_ssh_agent
+
+make_wrapper qstat
+make_wrapper qsub
+
+call_container 
