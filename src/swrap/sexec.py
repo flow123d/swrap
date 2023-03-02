@@ -1,22 +1,17 @@
+from typing import *
 import os
-import sys
 import shutil
 import argparse
 import subprocess
+#import attrs
+import socket
 
-from argparse import RawTextHelpFormatter
-
-
-def flush_print(*margs, **mkwargs):
-    print(*margs, file=sys.stdout, flush=True, **mkwargs)
-
-
-def oscommand(command_string):
-    flush_print(command_string)
-    flush_print(os.popen(command_string).read())
+from utils import flush_print, oscommand
+from pbs_utils import make_pbs_wrappers
 
 
-def process_image_path(image_path):
+
+def process_image_url(image_path: str) -> str:
     if os.path.isfile(image_path):
         image = os.path.abspath(image_path)
     elif image_path.startswith('docker://'):
@@ -26,20 +21,83 @@ def process_image_path(image_path):
     return image
 
 
-def copy_and_read_node_file(orig_node_file, directory):
-    flush_print("reading host file...")
+class SingularityCall:
+    def __init__(self, image, command, venv="", debug=False):
+        self.image: str = process_image_url(image)
+        # singularity image url
+        self.command: List[str] = command
+        print("command with args:", command)
+        # command to call in the container with its arguments
+        self.venv:str = os.path.abspath(venv) if venv else ""
+        self.bindings: List[str] = []
+        self.env_dict: Dict[str, str] = {}
+        self.debug: bool = False
 
-    # create a copy
-    node_file = os.path.join(directory, os.path.basename(orig_node_file))
-    shutil.copy(orig_node_file, node_file)
-    # mprint(os.popen("ls -l").read())
+    def append_path(self, add_path):
+        append_path_list = self.env_dict.get('APPEND_PATH', "").split(":")
+        append_path_list.append(add_path)
+        append_path_list = ":".join(append_path_list)
+        self.env_dict['APPEND_PATH'] = append_path_list
+
+    def prepend_path(self, add_path):
+        append_path_list = self.env_dict.get('PREPEND_PATH', "").split(":")
+        append_path_list.insert(0, add_path)
+        append_path_list = ":".join(append_path_list)
+        self.env_dict['PREPEND_PATH'] = append_path_list
+
+    def form_bindings(self):
+        # currently we olny support binding of the same paths in host and in container
+        return self.bindings
+
+    def form_env_list(self):
+        self.env_dict['SWRAP_SINGULARITY_VENV'] = self.venv
+        return [f"{key}={str(value)}" for key, value in self.env_dict.items()]
+
+    def cmd_list(self):
+        if len(self.venv) > 0:
+            self.prepend_path(os.path.join(os.path.abspath(self.venv), 'bin'))
+        sing_command = ['singularity', 'exec',
+                        '-B', ",".join(self.form_bindings()),
+                        '--env', ",".join(self.form_env_list()),
+                        self.image,
+                        *self.command]
+
+        # F] join all the arguments into final singularity container command
+        return  sing_command
+
+    def call(self):
+        flush_print("current directory:", os.getcwd())
+        # mprint(os.popen("ls -l").read())
+        flush_print("final command:", *self.cmd_list())
+        flush_print("=================== smpiexec.py END ===================")
+        if not self.debug:
+            flush_print("================== Program output START ==================")
+            # proc = subprocess.run(final_command_list)
+            oscommand(self.cmd_list())
+            flush_print("=================== Program output END ===================")
+        # exit(proc.returncode)
+
+
+def copy_and_read_node_file(directory):
+    node_file = os.path.join(directory, "nodefile")
+    orig_node_file = os.environ.get('PBS_NODEFILE', None)
+    if orig_node_file is None:
+        hostname = socket.gethostname()
+        flush_print(f"Warning: missing PBS_NODEFILE variable. Using just local node: {hostname}.")
+        with open(node_file, "w") as f:
+            f.write(hostname)    
+    else:
+        # create a copy
+        shutil.copy(orig_node_file, node_file)
+       
+    flush_print("reading host file...")
 
     # read node names
     with open(node_file) as fp:
         node_names_read = fp.read().splitlines()
         # remove duplicates
-        node_names = list(dict.fromkeys(node_names_read))
-        return node_file, node_names
+        node_names = list(set(node_names_read))
+    return node_file, node_names
 
 
 def create_ssh_agent():
@@ -113,7 +171,14 @@ def process_known_hosts_file(ssh_known_hosts_file, node_names):
 
 
 def prepare_scratch_dir(scratch_source, node_names):
-    scratch_dir_path = os.environ['SCRATCHDIR']
+    if scratch_source == "":
+        return os.getcwd()
+    
+    scratch_dir_path = os.environ.get('SCRATCHDIR', None)
+    if scratch_dir_path is None:
+        return os.getcwd()
+    
+    
     flush_print("Using SCRATCHDIR:", scratch_dir_path)
 
     flush_print("copying to SCRATCHDIR on all nodes...")
@@ -138,35 +203,41 @@ def prepare_scratch_dir(scratch_source, node_names):
     current_dir = os.getcwd()
     source_tar_filename = 'scratch.tar'
     source_tar_filepath = os.path.join(current_dir, source_tar_filename)
-    command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
-    oscommand(command)
+    oscommand(['tar', '-cvf', source_tar_filepath], cwd=source)
 
+    # copy to scratch dir on every used node through ssh
     for node in node_names:
         destination_name = username + "@" + node
         destination_path = destination_name + ':' + scratch_dir_path
-        command = ' '.join(['scp', source_tar_filepath, destination_path])
-        oscommand(command)
+        oscommand(['scp', source_tar_filepath, destination_path])
 
         # command = ' '.join(['ssh', destination_name, 'cd', scratch_dir_path, '&&', 'tar --strip-components 1 -xf', source_tar_filepath, '-C /'])
-        command = ' '.join(['ssh', destination_name, '"cd', scratch_dir_path, '&&', 'tar -xf', source_tar_filename,
-                            '&&', 'rm ', source_tar_filename, '"'])
-        oscommand(command)
+        oscommand(['ssh', destination_name, f'cd "{scratch_dir_path}" && tar -xf "{source_tar_filename}" && rm "source_tar_filename"'])
 
     # remove the scratch tar
-    oscommand(' '.join(['rm', source_tar_filename]))
+    oscommand(['rm', source_tar_filename])
     return scratch_dir_path
 
 
 def arguments():
-    parser = argparse.ArgumentParser(
-        description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.',
-        formatter_class=argparse.RawTextHelpFormatter)
+    description=\
+    """
+    Auxiliary executor for parallel programs running inside (Singularity) container under PBS.
+    
+    Provides some tools to start other jobs running in the same image:
+    1. wrapper sripts 'qsub' and 'qstat' are created in the job auxiliary directory
+    2. environment variables SINGULARITY_CONTAINER, SINGULARITY_BIND, SWRAP_SINGULARITY_VENV.
+    3. mpiexec ...
+    """
+    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-d', '--debug', action='store_true',
                         help='use testing files and print the final command')
     parser.add_argument('-i', '--image', type=str, required=True,
                         help='Singularity SIF image or Docker image (will be converted to SIF)')
     parser.add_argument('-B', '--bind', type=str, metavar="PATH,...", default="", required=False,
                         help='comma separated list of paths to be bind to Singularity container')
+    parser.add_argument('-e', '--venv', type=str, metavar="PATH", default="", required=False,
+                        help='If specified, the python virtual environment in PATH directory will be activated before given command.')
     parser.add_argument('-m', '--mpiexec', type=str, metavar="PATH", default="", required=False,
                         help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
     parser.add_argument('-s', '--scratch_copy', type=str, metavar="PATH", default="", required=False,
@@ -193,42 +264,37 @@ def arguments():
     return args
 
 
+def setup_aux_dir():
+    current_dir = os.getcwd()
+    pbs_job_id = os.environ.get('PBS_JOBID', f"pid_{os.getpid()}")
+    flush_print("PBS job id: ", pbs_job_id)
+    pbs_job_aux_dir =  os.path.join(current_dir, pbs_job_id + '_job')
+    # create auxiliary job output directory
+    os.makedirs(pbs_job_aux_dir, mode=0o775)
+    return pbs_job_aux_dir
+    
+    
 def main():
     flush_print("================== smpiexec.py START ==================")
-    current_dir = os.getcwd()
     args = arguments()
 
-    # get debug variable
-    debug = args.debug
-    # get program and its arguments
-    prog_args = args.prog[1:]
 
-    # get program and its arguments, set absolute path
-    image = process_image_path(args.image)
-
+    sing = SingularityCall(args.image, args.prog, args.venv, debug=args.debug)
     ###################################################################################################################
     # Process node file and setup ssh access to given nodes.
     ###################################################################################################################
 
     flush_print("Hostname: ", os.popen('hostname').read())
     # mprint("os.environ", os.environ)
+    pbs_job_aux_dir = setup_aux_dir()
 
-    pbs_job_id = os.environ['PBS_JOBID']
-    flush_print("PBS job id: ", pbs_job_id)
-    pbs_job_aux_dir =  os.path.join(current_dir, pbs_job_id + '_job')
-    # create auxiliary job output directory
-    os.makedirs(pbs_job_aux_dir, mode=0o775)
-    
     # get nodefile, copy it to local dir so that it can be passed into container mpiexec later
-    if debug:
-        orig_node_file = "testing_hostfile"
-    else:
-        orig_node_file = os.environ['PBS_NODEFILE']
-    node_file, node_names = copy_and_read_node_file(orig_node_file, pbs_job_aux_dir)
+    node_file, node_names = copy_and_read_node_file(pbs_job_aux_dir)
+        
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
-    if debug:
+    if sing.debug:
         # ssh_known_hosts_file = 'testing_known_hosts'
         ssh_known_hosts_file = 'xxx/.ssh/testing_known_hosts'
     else:
@@ -244,29 +310,24 @@ def main():
     ###################################################################################################################
 
     flush_print("assembling final command...")
-
-    scratch_dir_path = None
-    if 'SCRATCHDIR' in os.environ:
-        scratch_dir_path = prepare_scratch_dir(args.scratch_copy, node_names)
+    scratch_dir_path = prepare_scratch_dir(args.scratch_copy, node_names)
 
 
     # A] process bindings, exclude ssh agent in launcher bindings
     common_bindings = ["/etc/ssh/ssh_config", "/etc/ssh/ssh_known_hosts", "/etc/krb5.conf"]
-    bindings = [*common_bindings, os.environ['SSH_AUTH_SOCK']]
+    sing.bindings.extend(common_bindings)
+    sing.bindings.append(os.environ['SSH_AUTH_SOCK'])
     # possibly add current dir to container bindings
     # bindings = bindings + "," + current_dir + ":" + current_dir
     if args.bind != "":
-        bindings.append(args.bind)
+        sing.bindings.append(args.bind)
 
     if scratch_dir_path:
-        bindings.append(scratch_dir_path)
+        sing.bindings.append(scratch_dir_path)
 
-    sing_command = ['singularity', 'exec', '-B', ",".join(bindings), image]
 
-    flush_print('sing_command:', *sing_command)
-
-    # F] join all the arguments into final singularity container command
-    final_command_list = [*sing_command, *prog_args]
+    make_pbs_wrappers(pbs_job_aux_dir, sing.bindings)
+    sing.append_path(pbs_job_aux_dir)
 
     ###################################################################################################################
     # Final call.
@@ -275,18 +336,7 @@ def main():
       flush_print("Entering SCRATCHDIR:", scratch_dir_path)
       os.chdir(scratch_dir_path)
 
-    flush_print("current directory:", os.getcwd())
-    # mprint(os.popen("ls -l").read())
-    flush_print("final command:", *final_command_list)
-    flush_print("=================== smpiexec.py END ===================")
-    if not debug:
-        flush_print("================== Program output START ==================")
-        # proc = subprocess.run(final_command_list)
-        final_command = " ".join(final_command_list)
-        oscommand(final_command)
-
-        flush_print("=================== Program output END ===================")
-    # exit(proc.returncode)
+    sing.call()
 
 if __name__ == "__main__":
     main()
