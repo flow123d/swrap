@@ -3,6 +3,11 @@
 # TODO: 
 # - debug output to given file, practical for wrapper (mpiexec, qsub, qstat) debugging, need suitable print function
 # 
+
+# METACETRUM and singularity
+# - use project dir for SINGULARTY_CACHE
+# - set SINGULARITY_TMPDIR to a HOME dir or to the SCRATCH if in use, SCRATCH is allocated but not its use not checked
+
 set -x
 
 # Default debug output.
@@ -82,6 +87,33 @@ function dbgarray {
 }
 
 
+function env_list {
+    declare -a ENV_ASSIGN_LIST
+    if [ ${#CONT_ENV_LIST[@]} -gt 0 ]
+    then
+        for item in ${CONT_ENV_LIST[@]}
+        do  
+            if [ "${!item}" ]; then
+                ENV_ASSIGN_LIST+=("--env")
+                ENV_ASSIGN_LIST+=("$item=${!item}")
+            fi
+        done
+    fi    
+}
+
+
+function bind_list {
+    bind_option=$1
+    declare -a BIND_ASSIGN_LIST
+    if [ ${#CONT_BIND_LIST[@]} -gt 0 ]
+    then
+        for item in ${CONT_BIND_LIST[@]}
+        do  
+            BIND_ASSIGN_LIST+=("$bind_option")
+            BIND_ASSIGN_LIST+=("$item")
+        done
+    fi    
+}
 
 function print_usage() {
 cat << EOF
@@ -317,8 +349,9 @@ function create_ssh_agent () {
         eval $cmds 
     fi
     
-    dbg "SSH_AUTH_SOCK: '${SSH_AUTH_SOCK}'"
-    dbg "SSH_AGENT_PID: '${SSH_AGENT_PID}'"
+    [ "$SSH_AUTH_SOCK" ] || error "Unable to start ssh-agent."
+    #dbg "SSH_AUTH_SOCK: '${SSH_AUTH_SOCK}'"
+    #dbg "SSH_AGENT_PID: '${SSH_AGENT_PID}'"
 }
 
 
@@ -553,21 +586,28 @@ function call_docker() {
     # assert
     [[ -d "$JOB_AUX_DIR" && "$JOB_AUX_DIR" = $(pwd)* ]] || error "JOB_AUX_DIR not subdir of PWD"
     
+    env_list # procude ENV_ASSIGN_LIST from CONT_ENV_LIST
+    bind_list "-v"
     
-    docker run --rm -u $(id -u):$(id -g) $env_vars ${CONT_ENV_LIST[@]/#/-e } $binds ${CONT_BIND_LIST[@]/#/-v} -w $(pwd) $IMAGE_URL "${COMMAND_WITH_ARGS[@]}"
+    docker run --rm -u $(id -u):$(id -g) $env_vars $binds "${ENV_ASSIGN_LIST[@]}" "${BIND_ASSIGN_LIST[@]}" -w $(pwd) $IMAGE_URL "${COMMAND_WITH_ARGS[@]}"
 }
 
 
 function call_singularity() {
-    # prepare singularity image: download, convert, (install) 
-    LOCAL_IMAGE="$ENDORSE_WORKSPACE/endorse_ci_${tag}.sif"
-    if [ ! -f $LOCAL_IMAGE ]
-    then
-        singularity build  $ENDORSE_IMAGE "docker://$IMAGE_URL"  
-    fi
+    # TODO: use Scratch dir if provided
+    SINGULARITY_TMPDIR=${SINGULARITY_TMPDIR:-$HOME/singularity_tmpdir}
+    [ -d $SINGULARITY_TMPDIR ] || mkdir -p $SINGULARITY_TMPDIR
     
+    local singularity_image_url="docker://$IMAGE_URL"
+    # prepare singularity image: download, convert, (install) 
+    # build singularity image just once
+    singularity exec $singularity_image_url echo "Image $IMAGE_URL converted to singularity." 
+    
+    env_list # procude ENV_ASSIGN_LIST from CONT_ENV_LIST
+    bind_list "-B"
     # call 
-    singularity exec ${CONT_ENV_LIST[@]/#/-e } $LOCAL_IMAGE ${COMMAND_WITH_ARGS[@]}
+    singularity exec "${ENV_ASSIGN_LIST[@]}" "${BIND_ASSIGN_LIST[@]}" $singularity_image_url "${COMMAND_WITH_ARGS[@]}"
+
 }
 
 
@@ -576,9 +616,9 @@ function call_container {
     # - PWD (including JOB_AUX_DIR)
 
     
-    if [ -x `command -v docker` ]; then
+    if [ -x "$(command -v docker)" ]; then
         call_docker
-    elif [ -x `command -v singularity` ]; then            
+    elif [ -x "$(command -v singularity)" ]; then            
         call_singularity
     else
         error "No container tool. Not supported."
@@ -591,6 +631,7 @@ function call_container {
 
 WORKDIR=`pwd`
 parse_arguments "$@"
+
 
 # Report parsed arguments
 dbgvar DEBUG
@@ -615,5 +656,8 @@ create_ssh_agent
 
 make_wrapper qstat
 make_wrapper qsub
+
+# Always add pwd to the binds
+CONT_BIND_LIST+=("$(pwd):$(pwd)")
 
 call_container 

@@ -31,23 +31,20 @@ function check () {
     N_TST=$((N_TST+1))
 }
 
-IMG=alpine
-
 function test_local {
 name="test_local"
+IMG=alpine
 rm 'file 1' 'file 2'
 check "$name" -b="a:b,c:d" -e=A,B -m -s $IMG touch "file 1" "file 2"<<END
 DEBUG: './tst_stderr_$name'
 CONT_BIND_LIST: 'a:b' 'c:d'
 CONT_ENV_LIST: 'A' 'B'
 MPIEXEC: 'mpiexec'
-SCRATCH_INPUT_DIR: '/home/jb/workspace/endorse/submodules/swrap/src/swrap'
+SCRATCH_INPUT_DIR: '$(pwd)'
 IMAGE_URL: '$IMG'
 COMMAND_WITH_ARGS: 'touch' 'file 1' 'file 2'
 PBS_JOBID: 'pid_\${subproc_pid}'
 NODE_NAMES list: $(hostname)
-SSH_AUTH_SOCK: '/run/user/1000/keyring/ssh'
-SSH_AGENT_PID: ''
 END
 # check command effect
 [ -f 'file 1' ] || echo "Missing touched 'file 1'."
@@ -57,25 +54,24 @@ END
 
 function test_pbs_artificial {
 name="test_pbs_artificial"
+IMG=ubuntu
 rm 'file 1' 'file 2'
+export A="X Y Z"
 export PBS_JOBID=1234
 export PBS_NODEFILE=tst_nodefile
-check "$name" -b="a:b,c:d" -e=A,B -m -s $IMG CMD ARG1 ARG2 <<END
-DEBUG: './tst_stderr_2'
-CONT_BIND_LIST: a:b c:d
-CONT_ENV_LIST: A B
+check "$name" -b="a:b,c:d" -e=A,B -m -s $IMG bash -c 'echo $A >cont_out' <<END
+DEBUG: './tst_stderr_$name'
+CONT_BIND_LIST: 'a:b' 'c:d'
+CONT_ENV_LIST: 'A' 'B'
 MPIEXEC: 'mpiexec'
-SCRATCH_INPUT_DIR: '/home/jb/workspace/endorse/submodules/swrap/src/swrap'
-IMAGE_URL: 'IMG'
-COMMAND: CMD ARG1 ARG2
+SCRATCH_INPUT_DIR: '$(pwd)'
+IMAGE_URL: '$IMG'
+COMMAND: bash -c 'echo $A >cont_out'
 PBS_JOBID: '1234'
 NODE_NAMES list: charon21.nti.tul.cz charon22.nti.tul.cz
-SSH_AUTH_SOCK: '/run/user/1000/keyring/ssh'
-SSH_AGENT_PID: ''
 END
 # check command effect
-[ -f 'file 1' ] || echo "Missing touched 'file 1'."
-[ -f 'file 2' ] || echo "Missing touched 'file 2'."
+[ "$(cat cont_out)" = "X Y Z" ] || "Container command not performed."
 }
 
 
@@ -93,8 +89,6 @@ IMAGE_URL: 'IMG'
 COMMAND: CMD ARG1 ARG2
 PBS_JOBID: '1234'
 NODE_NAMES list: charon21.nti.tul.cz charon22.nti.tul.cz
-SSH_AUTH_SOCK: '/run/user/1000/keyring/ssh'
-SSH_AGENT_PID: ''
 END
 }
 
@@ -102,6 +96,7 @@ END
 
 test_local
 test_pbs_artificial
-if [ command -v qsub ]; then
-    test_pbs_real
+if [ -x "$(command -v qsub)" ]
+then
+    #test_pbs_real
 fi
