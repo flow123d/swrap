@@ -114,7 +114,9 @@ def process_known_hosts_file(ssh_known_hosts_file, node_names):
 
 def prepare_scratch_dir(scratch_source, node_names):
     scratch_dir_path = os.environ['SCRATCHDIR']
-    flush_print("Using SCRATCHDIR:", scratch_dir_path)
+    if scratch_source == "":
+        return
+    flush_print("Using SCRATCHDIR: '" + scratch_dir_path + "'")
 
     flush_print("copying to SCRATCHDIR on all nodes...")
     username = os.environ['USER']
@@ -126,7 +128,7 @@ def prepare_scratch_dir(scratch_source, node_names):
         # source = ' '.join(paths)
         source = scratch_source
     else:
-        raise Exception("--scratch_copy argument is not a valid directory: " + scratch_source)
+        raise Exception("--scratch_copy argument is not a valid directory: '" + scratch_source + "'")
         # with open(scratch_source) as fp:
         #   paths = fp.read().splitlines()
         #   source = ' '.join(paths)
