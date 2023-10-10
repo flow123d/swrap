@@ -88,7 +88,8 @@ def main():
         orig_node_file = "testing_hostfile"
     else:
         orig_node_file = os.environ['PBS_NODEFILE']
-    node_file, node_names = sexec.copy_and_read_node_file(orig_node_file, pbs_job_aux_dir)
+    node_file = copy_node_file(orig_node_file, pbs_job_aux_dir)
+    node_names = read_node_file(node_file)
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []

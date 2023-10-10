@@ -26,20 +26,25 @@ def process_image_path(image_path):
     return image
 
 
-def copy_and_read_node_file(orig_node_file, directory):
-    flush_print("reading host file...")
+def copy_node_file(orig_node_file, directory):
+    flush_print("copying host file...")
 
     # create a copy
     node_file = os.path.join(directory, os.path.basename(orig_node_file))
     shutil.copy(orig_node_file, node_file)
     # mprint(os.popen("ls -l").read())
+    return node_file
+
+
+def read_node_file(node_file):
+    flush_print("reading host file...")
 
     # read node names
     with open(node_file) as fp:
         node_names_read = fp.read().splitlines()
         # remove duplicates
         node_names = list(dict.fromkeys(node_names_read))
-        return node_file, node_names
+        return node_names
 
 
 def create_ssh_agent():
@@ -112,6 +117,7 @@ def process_known_hosts_file(ssh_known_hosts_file, node_names):
         fp.writelines(ssh_known_hosts_to_append)
 
 
+# noinspection PyInterpreter
 def prepare_scratch_dir(scratch_source, node_names):
     scratch_dir_path = os.environ['SCRATCHDIR']
     if scratch_source == "":
@@ -226,7 +232,8 @@ def main():
         orig_node_file = "testing_hostfile"
     else:
         orig_node_file = os.environ['PBS_NODEFILE']
-    node_file, node_names = copy_and_read_node_file(orig_node_file, pbs_job_aux_dir)
+    node_file = copy_node_file(orig_node_file, pbs_job_aux_dir)
+    node_names = read_node_file(node_file)
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
