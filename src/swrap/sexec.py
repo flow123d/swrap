@@ -115,7 +115,7 @@ def process_known_hosts_file(ssh_known_hosts_file, node_names):
 def prepare_scratch_dir(scratch_source, node_names):
     scratch_dir_path = os.environ['SCRATCHDIR']
     if scratch_source == "":
-        return
+        return scratch_dir_path
     flush_print("Using SCRATCHDIR: '" + scratch_dir_path + "'")
 
     flush_print("copying to SCRATCHDIR on all nodes...")
@@ -138,7 +138,7 @@ def prepare_scratch_dir(scratch_source, node_names):
 
     # create tar
     current_dir = os.getcwd()
-    source_tar_filename = 'scratch.tar'
+    source_tar_filename = 'scratch_' + os.environ['PBS_JOBID'] + '.tar'
     source_tar_filepath = os.path.join(current_dir, source_tar_filename)
     command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
     oscommand(command)
@@ -196,7 +196,7 @@ def arguments():
 
 
 def main():
-    flush_print("================== smpiexec.py START ==================")
+    flush_print("================== sexec.py START ==================")
     current_dir = os.getcwd()
     args = arguments()
 
@@ -280,7 +280,7 @@ def main():
     flush_print("current directory:", os.getcwd())
     # mprint(os.popen("ls -l").read())
     flush_print("final command:", *final_command_list)
-    flush_print("=================== smpiexec.py END ===================")
+    flush_print("=================== sexec.py END ===================")
     if not debug:
         flush_print("================== Program output START ==================")
         # proc = subprocess.run(final_command_list)
