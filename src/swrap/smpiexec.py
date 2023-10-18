@@ -88,8 +88,8 @@ def main():
         orig_node_file = "testing_hostfile"
     else:
         orig_node_file = os.environ['PBS_NODEFILE']
-    node_file = copy_node_file(orig_node_file, pbs_job_aux_dir)
-    node_names = read_node_file(node_file)
+    node_file = sexec.copy_node_file(orig_node_file, pbs_job_aux_dir)
+    node_names = sexec.read_node_file(node_file)
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
@@ -152,7 +152,7 @@ def main():
     #     raise Exception("mpiexec path '" + mpiexec_path + "' not found in container!")
 
     # D] join mpiexec arguments
-    mpiexec_args = prepare_mpiexec_runner(scratch_dir_path, mpiexec_path, node_file, launcher_path)
+    mpiexec_args = prepare_mpiexec_runner(current_dir, mpiexec_path, node_file, launcher_path)
     # mpiexec_args = [mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path]
 
     # F] join all the arguments into final singularity container command
