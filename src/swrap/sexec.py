@@ -11,9 +11,20 @@ def flush_print(*margs, **mkwargs):
     print(*margs, file=sys.stdout, flush=True, **mkwargs)
 
 
-def oscommand(command_string):
+def oscommand(command):
+    if isinstance(command, list):
+        command_string = ' '.join(command)
+    elif isinstance(command, str):
+        command_string = command
+    else:
+        raise Exception("Input command is not str or list.")
     flush_print(command_string)
     flush_print(os.popen(command_string).read())
+
+
+def ssh_command(destination, command_list):
+    command = 'ssh ' + destination + ' \"' + ' '.join(command_list) + '\"'
+    oscommand(command)
 
 
 def process_image_path(image_path):
@@ -146,22 +157,21 @@ def prepare_scratch_dir(scratch_source, node_names):
     current_dir = os.getcwd()
     source_tar_filename = 'scratch_' + os.environ['PBS_JOBID'] + '.tar'
     source_tar_filepath = os.path.join(current_dir, source_tar_filename)
-    command = ' '.join(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
-    oscommand(command)
+    oscommand(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
 
     for node in node_names:
         destination_name = username + "@" + node
         destination_path = destination_name + ':' + scratch_dir_path
-        command = ' '.join(['scp', source_tar_filepath, destination_path])
-        oscommand(command)
+        # copy tar to node
+        oscommand(['scp', source_tar_filepath, destination_path])
 
+        # extract tar on node and remove tar
+        command_list = ['cd', scratch_dir_path, '&&', 'tar -xf', source_tar_filename, '&&', 'rm ', source_tar_filename]
+        ssh_command(destination_name, command_list)
         # command = ' '.join(['ssh', destination_name, 'cd', scratch_dir_path, '&&', 'tar --strip-components 1 -xf', source_tar_filepath, '-C /'])
-        command = ' '.join(['ssh', destination_name, '"cd', scratch_dir_path, '&&', 'tar -xf', source_tar_filename,
-                            '&&', 'rm ', source_tar_filename, '"'])
-        oscommand(command)
 
     # remove the scratch tar
-    oscommand(' '.join(['rm', source_tar_filename]))
+    oscommand(['rm', source_tar_filename])
     return scratch_dir_path
 
 
@@ -291,8 +301,7 @@ def main():
     if not debug:
         flush_print("================== Program output START ==================")
         # proc = subprocess.run(final_command_list)
-        final_command = " ".join(final_command_list)
-        oscommand(final_command)
+        oscommand(final_command_list)
 
         flush_print("=================== Program output END ===================")
     # exit(proc.returncode)
