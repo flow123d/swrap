@@ -58,6 +58,18 @@ def read_node_file(node_file):
         return node_names
 
 
+def read_node_files_from_auxdir():
+    pbs_job_id = os.environ['PBS_JOBID']
+    flush_print("PBS job id: ", pbs_job_id)
+    pbs_workdir= os.environ['PBS_O_WORKDIR']
+    pbs_job_aux_dir = os.path.join(pbs_workdir, pbs_job_id + '_job')
+
+    orig_node_file = os.environ['PBS_NODEFILE']
+    node_file = os.path.join(pbs_job_aux_dir, os.path.basename(orig_node_file))
+    node_names = read_node_file(node_file)
+    return node_names
+
+
 def create_ssh_agent():
     """
     Setup ssh agent and set appropriate environment variables.
@@ -153,6 +165,9 @@ def prepare_scratch_dir(scratch_source, node_names):
     if source is None or source is []:
         flush_print(scratch_source, "is empty")
 
+    hostname = os.popen('hostname').read().strip()
+    flush_print("Hostname:", hostname)
+
     # create tar
     current_dir = os.getcwd()
     source_tar_filename = 'scratch_' + os.environ['PBS_JOBID'] + '.tar'
@@ -160,6 +175,7 @@ def prepare_scratch_dir(scratch_source, node_names):
     oscommand(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
 
     for node in node_names:
+        flush_print("Node:", node)
         destination_name = username + "@" + node
         destination_path = destination_name + ':' + scratch_dir_path
         # copy tar to node
@@ -169,6 +185,9 @@ def prepare_scratch_dir(scratch_source, node_names):
         command_list = ['cd', scratch_dir_path, '&&', 'tar -xf', source_tar_filename, '&&', 'rm ', source_tar_filename]
         ssh_command(destination_name, command_list)
         # command = ' '.join(['ssh', destination_name, 'cd', scratch_dir_path, '&&', 'tar --strip-components 1 -xf', source_tar_filepath, '-C /'])
+
+        # show files on node
+        ssh_command(destination_name, ['cd', scratch_dir_path, '&&', 'ls -aR'])
 
     # remove the scratch tar
     oscommand(['rm', source_tar_filename])
