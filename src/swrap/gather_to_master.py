@@ -56,7 +56,7 @@ def gather_to_master(node_names, sub_dir, verbose=False, clear=True):
             oscommand(['cd', scratch_dir_path, '&&', 'rm', node_tar_filename])
 
 
-def create_parser():
+def create_argparser():
     parser = sexec.create_base_argparser()
 
     parser.add_argument('-c', '--clear', action='store_true', default=False, help='clear temporary tarballs')
@@ -80,7 +80,7 @@ def main():
     node_names = sexec.read_node_files_from_auxdir()
 
     flush_print("Gather from slaves to master...")
-    gather_to_master(node_names, args.subdir, verbose=args.verbose, clear=args.clear)
+    gather_to_master(node_names, args.subdir[0], verbose=args.verbose, clear=args.clear)
 
     flush_print("================== gather_to_master.py END ==================")
 

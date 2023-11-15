@@ -75,7 +75,8 @@ def main():
     node_names = sexec.read_node_files_from_auxdir()
 
     flush_print("Copy from master to slaves...")
-    distribute_to_slaves(node_names, args.subdir, verbose=args.verbose, clear=args.clear)
+    flush_print("args.subdir", args.subdir)
+    distribute_to_slaves(node_names, args.subdir[0], verbose=args.verbose, clear=args.clear)
 
     flush_print("================== distribute_to_slaves.py END ==================")
 
