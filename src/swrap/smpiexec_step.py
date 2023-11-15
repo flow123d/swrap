@@ -7,12 +7,21 @@ from sexec import flush_print
 import smpiexec
 
 
+def create_argparser():
+    parser = sexec.create_base_argparser()
+    smpiexec.add_prog_arg(parser)
+
+    # parser.print_help()
+    # parser.print_usage()
+    return parser
+
+
 """
     Script which calls a program in prepared environment by swrap.
 """
 if __name__ == "__main__":
     flush_print("================== smpiexec_step.py START ==================")
-    parser = smpiexec.create_argparser()
+    parser = create_argparser()
     args = parser.parse_args()
 
     flush_print("Hostname: ", os.popen('hostname').read().strip())

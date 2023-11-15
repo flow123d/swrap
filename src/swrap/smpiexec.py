@@ -7,21 +7,24 @@ from sexec import flush_print
 import smpiexec_prepare
 
 
-def create_argparser():
-    parser = smpiexec_prepare.create_argparser()
-
+def add_prog_arg(parser):
     parser.add_argument('prog', nargs=argparse.REMAINDER,
                         help='''
-                        mpiexec arguments and the executable, follow mpiexec doc:
-                        "mpiexec args executable pgmargs [ : args executable pgmargs ... ]"
+                            mpiexec arguments and the executable, follow mpiexec doc:
+                            "mpiexec args executable pgmargs [ : args executable pgmargs ... ]"
 
-                        still can use MPMD (Multiple Program Multiple Data applications):
-                        -n 4 program1 : -n 3 program2 : -n 2 program3 ...
-                        ''')
+                            still can use MPMD (Multiple Program Multiple Data applications):
+                            -n 4 program1 : -n 3 program2 : -n 2 program3 ...
+                            ''')
 
     # create the parser for the "prog" command
     # parser_prog = parser.add_subparsers().add_parser('prog', help='program to be run and all its arguments')
     # parser_prog.add_argument('args', nargs="+", help="all arguments passed to 'prog'")
+
+
+def create_argparser():
+    parser = smpiexec_prepare.create_argparser()
+    add_prog_arg(parser)
 
     # parser.print_help()
     # parser.print_usage()
