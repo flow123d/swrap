@@ -4,14 +4,16 @@ import subprocess
 
 import sexec
 from sexec import flush_print
+import smpiexec
+
 
 """
     Script which calls a program in prepared environment by swrap.
 """
 if __name__ == "__main__":
     flush_print("================== smpiexec_step.py START ==================")
-    current_dir = os.getcwd()
-    prog_args = args = sys.argv[1:]
+    parser = smpiexec.create_argparser()
+    args = parser.parse_args()
 
     flush_print("Hostname: ", os.popen('hostname').read().strip())
     # mprint("os.environ", os.environ)
@@ -26,5 +28,4 @@ if __name__ == "__main__":
 
     flush_print("=================== Program output START ===================")
     sexec.oscommand([smpiexec_wrap, *prog_args])
-
     flush_print("==================== Program output END ====================")

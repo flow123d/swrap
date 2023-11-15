@@ -5,7 +5,7 @@ import sexec
 from sexec import flush_print, oscommand, ssh_command
 
 
-def gather_to_master(node_names, sub_dir, clear=True):
+def gather_to_master(node_names, sub_dir, verbose=False, clear=True):
     """
         Auxiliary function for copying files from slave nodes to master node.
         Supposes using SCRATCHDIR.
@@ -33,12 +33,14 @@ def gather_to_master(node_names, sub_dir, clear=True):
         source_name = username + "@" + node
 
         # print scratchdir content
-        # ssh_command(source_name, ['cd', scratch_dir_path, '&&', 'ls -aR'])
+        if verbose:
+            ssh_command(source_name, ['cd', scratch_dir_path, '&&', 'ls -aR'])
 
         # create tar on node
         node_tar_filename = node + ".tar"
         node_tar_filepath = os.path.join(scratch_dir_path, node_tar_filename)
-        ssh_command(source_name, ['cd', destination_path, '&&', 'tar -cvf', node_tar_filepath, '.'])
+        tar_args = '-cvf' if verbose else '-cf'
+        ssh_command(source_name, ['cd', destination_path, '&&', 'tar', tar_args, node_tar_filepath, '.'])
 
         # copy tar to master node
         oscommand(['scp', source_name + ':' + node_tar_filepath, scratch_dir_path])
@@ -54,9 +56,21 @@ def gather_to_master(node_names, sub_dir, clear=True):
             oscommand(['cd', scratch_dir_path, '&&', 'rm', node_tar_filename])
 
 
-if __name__ == "__main__":
+def create_parser():
+    parser = sexec.create_argparser()
+
+    parser.add_argument('-c', '--clear', action='store_true', default=False, help='clear temporary tarballs')
+    parser.add_argument('subdir', nargs=1, help="Subdirectory to copy to SCRATCHDIR.")
+
+    # parser.print_help()
+    # parser.print_usage()
+    return parser
+
+
+def main():
     flush_print("================== gather_to_master.py START ==================")
-    sub_dir = sys.argv[1]
+    parser = create_argparser()
+    args = parser.parse_args()
 
     ###################################################################################################################
     # Copy from slaves to master.
@@ -66,6 +80,10 @@ if __name__ == "__main__":
     node_names = sexec.read_node_files_from_auxdir()
 
     flush_print("Gather from slaves to master...")
-    gather_to_master(node_names, sub_dir, clear=True)
+    gather_to_master(node_names, args.subdir, verbose=args.verbose, clear=args.clear)
 
     flush_print("================== gather_to_master.py END ==================")
+
+
+if __name__ == "__main__":
+    main()

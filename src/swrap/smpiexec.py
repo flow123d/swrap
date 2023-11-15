@@ -3,67 +3,38 @@ import subprocess
 
 import sexec
 from sexec import flush_print
+import smpiexec_prepare
 
 
-def prepare_mpiexec_launcher(pbs_job_aux_dir, pbs_job_id, sing_command_in_launcher):
-    flush_print("creating launcher script...")
-    launcher_path = os.path.join(pbs_job_aux_dir, "launcher_" + pbs_job_id + ".sh")
-    launcher_log = '| adddate >> ' + os.path.join(pbs_job_aux_dir, 'launcher_' + pbs_job_id + '.log')
-    # https://stackoverflow.com/questions/20572934/get-the-name-of-the-caller-script-in-bash-script
-    launcher_lines = [
-        '#!/bin/bash',
-        '\n',
-        'adddate() {',
-        '    awk \'{ print strftime("[%Y-%m-%d %H:%M:%S]"), $0; fflush(); }\'',
-        '}\n',
-        'PARENT_COMMAND=$(ps -o args= $PPID)',
-        'echo "" ' + launcher_log,
-        'echo "parent call: $PARENT_COMMAND" ' + launcher_log,
-        'echo $(hostname) ' + launcher_log,
-        'echo $(pwd) ' + launcher_log,
-        'echo "\$@: $@" ' + launcher_log,
-        'echo "ssh parameters: $1 $2" ' + launcher_log,
-        'echo "launcher command: ${@:3}" ' + launcher_log,
-        'echo "singularity container: $SINGULARITY_NAME" ' + launcher_log,
-        '\n',
-        'ssh $1 $2 ' + sing_command_in_launcher + ' ${@:3}',
-        'echo "ssh exit status: " $? ' + launcher_log
-    ]
-    with open(launcher_path, 'w') as f:
-        f.write('\n'.join(launcher_lines))
-    sexec.oscommand('chmod +x ' + launcher_path)
-    return launcher_path
+def create_argparser():
+    parser = sexec.create_base_argparser()
+    sexec.add_sexec_args(parser)
+    smpiexec_prepare.add_mpiexec_arg(parser)
 
+    parser.add_argument('prog', nargs=argparse.REMAINDER,
+                        help='''
+                        mpiexec arguments and the executable, follow mpiexec doc:
+                        "mpiexec args executable pgmargs [ : args executable pgmargs ... ]"
 
-def prepare_mpiexec_runner(destination, mpiexec_path, node_file, launcher_path):
-    mpiexec_args = [mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path]
-    flush_print("creating mpiexec and mpirun wrappers...")
-    mpiexec_wrap = os.path.join(destination, "mpiexec")
-    mpirun_wrap = os.path.join(destination, "mpirun")
-    lines = [
-        '#!/bin/bash',
-        '\n',
-        #'PARENT_COMMAND=$(ps -o args= $PPID)',
-        #'echo "parent call: $PARENT_COMMAND" ',
-        'echo "\$@: $@"',
-        ' '.join(mpiexec_args) + ' $@',
-    ]
-    with open(mpiexec_wrap, 'w') as f:
-        f.write('\n'.join(lines))
-    with open(mpirun_wrap, 'w') as f:
-        f.write('\n'.join(lines))
-    sexec.oscommand('chmod +x ' + mpiexec_wrap)
-    sexec.oscommand('chmod +x ' + mpirun_wrap)
-    return mpiexec_args
+                        still can use MPMD (Multiple Program Multiple Data applications):
+                        -n 4 program1 : -n 3 program2 : -n 2 program3 ...
+                        ''')
+
+    # create the parser for the "prog" command
+    # parser_prog = parser.add_subparsers().add_parser('prog', help='program to be run and all its arguments')
+    # parser_prog.add_argument('args', nargs="+", help="all arguments passed to 'prog'")
+
+    # parser.print_help()
+    # parser.print_usage()
+    return parser
 
 
 def main():
     flush_print("================== smpiexec.py START ==================")
     current_dir = os.getcwd()
-    args = sexec.arguments()
+    parser = create_argparser()
+    args = parser.parse_args()
 
-    # get debug variable
-    debug = args.debug
     # get program and its arguments
     prog_args = args.prog[1:]
 
@@ -84,7 +55,7 @@ def main():
     os.makedirs(pbs_job_aux_dir, mode=0o775)
     
     # get nodefile, copy it to local dir so that it can be passed into container mpiexec later
-    if debug:
+    if args.debug:
         orig_node_file = "testing_hostfile"
     else:
         orig_node_file = os.environ['PBS_NODEFILE']
@@ -93,7 +64,7 @@ def main():
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
-    if debug:
+    if args.debug:
         # ssh_known_hosts_file = 'testing_known_hosts'
         ssh_known_hosts_file = 'xxx/.ssh/testing_known_hosts'
     else:
@@ -136,7 +107,7 @@ def main():
     flush_print('sing_command_in_ssh:', sing_command_in_launcher)
 
     # B] prepare node launcher script
-    launcher_path = prepare_mpiexec_launcher(pbs_job_aux_dir, pbs_job_id, sing_command_in_launcher)
+    launcher_path = smpiexec_prepare.prepare_mpiexec_launcher(pbs_job_aux_dir, pbs_job_id, sing_command_in_launcher)
 
     # C] set mpiexec path inside the container
     # if container path to mpiexec is provided, use it
@@ -152,7 +123,7 @@ def main():
     #     raise Exception("mpiexec path '" + mpiexec_path + "' not found in container!")
 
     # D] join mpiexec arguments
-    mpiexec_args = prepare_mpiexec_runner(current_dir, mpiexec_path, node_file, launcher_path)
+    mpiexec_args = smpiexec_prepare.prepare_mpiexec_runner(current_dir, mpiexec_path, node_file, launcher_path)
     # mpiexec_args = [mpiexec_path, '-f', node_file, '-launcher-exec', launcher_path]
 
     # F] join all the arguments into final singularity container command
@@ -169,7 +140,7 @@ def main():
     # mprint(os.popen("ls -l").read())
     flush_print("final command:", *final_command_list)
     flush_print("=================== smpiexec.py END ===================")
-    if not debug:
+    if not args.debug:
         flush_print("================== Program output START ==================")
         # proc = subprocess.run(final_command_list)
         final_command = " ".join(final_command_list)
@@ -177,6 +148,7 @@ def main():
 
         flush_print("=================== Program output END ===================")
     # exit(proc.returncode)
+
 
 if __name__ == "__main__":
     main()

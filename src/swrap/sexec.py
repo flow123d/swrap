@@ -19,7 +19,9 @@ def oscommand(command):
     else:
         raise Exception("Input command is not str or list.")
     flush_print(command_string)
-    flush_print(os.popen(command_string).read())
+    out = os.popen(command_string).read()
+    if len(out) > 0:    # avoid empty lines with no char
+        flush_print(out)
 
 
 def ssh_command(destination, command_list):
@@ -141,7 +143,7 @@ def process_known_hosts_file(ssh_known_hosts_file, node_names):
 
 
 # noinspection PyInterpreter
-def prepare_scratch_dir(scratch_source, node_names):
+def prepare_scratch_dir(scratch_source, node_names, verbose):
     scratch_dir_path = os.environ['SCRATCHDIR']
     if scratch_source == "":
         return scratch_dir_path
@@ -172,7 +174,8 @@ def prepare_scratch_dir(scratch_source, node_names):
     current_dir = os.getcwd()
     source_tar_filename = 'scratch_' + os.environ['PBS_JOBID'] + '.tar'
     source_tar_filepath = os.path.join(current_dir, source_tar_filename)
-    oscommand(['cd', source, '&&', 'tar -cvf', source_tar_filepath, '.', '&& cd', current_dir])
+    tar_args = '-cvf' if verbose else '-cf'
+    oscommand(['cd', source, '&&', 'tar', tar_args, source_tar_filepath, '.', '&& cd', current_dir])
 
     for node in node_names:
         flush_print("Node:", node)
@@ -187,38 +190,42 @@ def prepare_scratch_dir(scratch_source, node_names):
         # command = ' '.join(['ssh', destination_name, 'cd', scratch_dir_path, '&&', 'tar --strip-components 1 -xf', source_tar_filepath, '-C /'])
 
         # show files on node
-        ssh_command(destination_name, ['cd', scratch_dir_path, '&&', 'ls -aR'])
+        if verbose:
+            ssh_command(destination_name, ['cd', scratch_dir_path, '&&', 'ls -aR'])
 
     # remove the scratch tar
     oscommand(['rm', source_tar_filename])
     return scratch_dir_path
 
 
-def arguments():
+def create_base_argparser():
     parser = argparse.ArgumentParser(
         description='Auxiliary executor for parallel programs running inside (Singularity) container under PBS.',
         formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('-d', '--debug', action='store_true',
+    parser.add_argument('-d', '--debug', action='store_true', default=False,
                         help='use testing files and print the final command')
+    parser.add_argument('-v', '--verbose', action='store_true', default=False,
+                        help='verbose print into job log')
+    return parser
+
+
+def add_sexec_args(parser):
     parser.add_argument('-i', '--image', type=str, required=True,
                         help='Singularity SIF image or Docker image (will be converted to SIF)')
     parser.add_argument('-B', '--bind', type=str, metavar="PATH,...", default="", required=False,
                         help='comma separated list of paths to be bind to Singularity container')
-    parser.add_argument('-m', '--mpiexec', type=str, metavar="PATH", default="", required=False,
-                        help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
     parser.add_argument('-s', '--scratch_copy', type=str, metavar="PATH", default="", required=False,
                         help='''
-                        directory path, its content will be copied to SCRATCHDIR;
-                        ''')
-    # if file path, each user defined path inside the file will be copied to SCRATCHDIR
-    parser.add_argument('prog', nargs=argparse.REMAINDER,
-                        help='''
-                        mpiexec arguments and the executable, follow mpiexec doc:
-                        "mpiexec args executable pgmargs [ : args executable pgmargs ... ]"
+                            directory path, its content will be copied to SCRATCHDIR;
+                            ''')
 
-                        still can use MPMD (Multiple Program Multiple Data applications):
-                        -n 4 program1 : -n 3 program2 : -n 2 program3 ...
-                        ''')
+
+def create_argparser():
+    parser = create_base_argparser()
+    add_sexec_args(parser)
+
+    # if file path, each user defined path inside the file will be copied to SCRATCHDIR
+    parser.add_argument('prog', nargs=argparse.REMAINDER, help="program arguments")
 
     # create the parser for the "prog" command
     # parser_prog = parser.add_subparsers().add_parser('prog', help='program to be run and all its arguments')
@@ -226,17 +233,15 @@ def arguments():
 
     # parser.print_help()
     # parser.print_usage()
-    args = parser.parse_args()
-    return args
+    return parser
 
 
 def main():
     flush_print("================== sexec.py START ==================")
     current_dir = os.getcwd()
-    args = arguments()
+    parser = create_argparser()
+    args = parser.parse_args()
 
-    # get debug variable
-    debug = args.debug
     # get program and its arguments
     prog_args = args.prog[1:]
 
@@ -257,7 +262,7 @@ def main():
     os.makedirs(pbs_job_aux_dir, mode=0o775)
     
     # get nodefile, copy it to local dir so that it can be passed into container mpiexec later
-    if debug:
+    if args.debug:
         orig_node_file = "testing_hostfile"
     else:
         orig_node_file = os.environ['PBS_NODEFILE']
@@ -266,7 +271,7 @@ def main():
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
-    if debug:
+    if args.debug:
         # ssh_known_hosts_file = 'testing_known_hosts'
         ssh_known_hosts_file = 'xxx/.ssh/testing_known_hosts'
     else:
@@ -285,8 +290,7 @@ def main():
 
     scratch_dir_path = None
     if 'SCRATCHDIR' in os.environ:
-        scratch_dir_path = prepare_scratch_dir(args.scratch_copy, node_names)
-
+        scratch_dir_path = prepare_scratch_dir(args.scratch_copy, node_names, args.verbose)
 
     # A] process bindings, exclude ssh agent in launcher bindings
     common_bindings = ["/etc/ssh/ssh_config", "/etc/ssh/ssh_known_hosts", "/etc/krb5.conf"]
@@ -310,20 +314,21 @@ def main():
     # Final call.
     ###################################################################################################################
     if scratch_dir_path:
-      flush_print("Entering SCRATCHDIR:", scratch_dir_path)
-      os.chdir(scratch_dir_path)
+        flush_print("Entering SCRATCHDIR:", scratch_dir_path)
+        os.chdir(scratch_dir_path)
 
     flush_print("current directory:", os.getcwd())
     # mprint(os.popen("ls -l").read())
     flush_print("final command:", *final_command_list)
     flush_print("=================== sexec.py END ===================")
-    if not debug:
+    if not args.debug:
         flush_print("================== Program output START ==================")
         # proc = subprocess.run(final_command_list)
         oscommand(final_command_list)
 
         flush_print("=================== Program output END ===================")
     # exit(proc.returncode)
+
 
 if __name__ == "__main__":
     main()

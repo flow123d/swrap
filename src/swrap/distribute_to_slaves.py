@@ -5,7 +5,7 @@ import sexec
 from sexec import flush_print, oscommand, ssh_command
 
 
-def distribute_to_slaves(node_names, sub_dir, clear=True):
+def distribute_to_slaves(node_names, sub_dir, verbose=False, clear=True):
     """
         Auxiliary function for copying files from master node to all slave nodes.
         Supposes using SCRATCHDIR.
@@ -24,7 +24,8 @@ def distribute_to_slaves(node_names, sub_dir, clear=True):
     # create tar on master
     tar_filename = "master.tar"
     tar_filepath = os.path.join(scratch_dir_path, tar_filename)
-    oscommand(['cd', os.path.join(scratch_dir_path, sub_dir), '&&', 'tar -cvf', tar_filepath, '.'])
+    tar_args = '-cvf' if verbose else '-cf'
+    oscommand(['cd', os.path.join(scratch_dir_path, sub_dir), '&&', 'tar', tar_args, tar_filepath, '.'])
 
     for node in node_names:
         if node == hostname:
@@ -43,15 +44,28 @@ def distribute_to_slaves(node_names, sub_dir, clear=True):
         if clear:
             ssh_command(destination_name, ['rm', tar_filepath])
 
-        ssh_command(destination_name, ['cd', scratch_dir_path, '&&', 'ls -aR'])
+        if verbose:
+            ssh_command(destination_name, ['cd', scratch_dir_path, '&&', 'ls -aR'])
 
     if clear:
         oscommand(['rm', tar_filepath])
 
 
-if __name__ == "__main__":
+def create_argparser():
+    parser = sexec.create_argparser()
+
+    parser.add_argument('-c', '--clear', action='store_true', default=False, help='clear temporary tarballs')
+    parser.add_argument('subdir', nargs=1, help="Subdirectory to copy to SCRATCHDIR.")
+
+    # parser.print_help()
+    # parser.print_usage()
+    return parser
+
+
+def main():
     flush_print("================== distribute_to_slaves.py START ==================")
-    sub_dir = sys.argv[1]
+    parser = create_argparser()
+    args = parser.parse_args()
 
     ###################################################################################################################
     # Copy from master to slaves.
@@ -61,6 +75,10 @@ if __name__ == "__main__":
     node_names = sexec.read_node_files_from_auxdir()
 
     flush_print("Copy from master to slaves...")
-    distribute_to_slaves(node_names, sub_dir)
+    distribute_to_slaves(node_names, args.subdir, verbose=args.verbose, clear=args.clear)
 
     flush_print("================== distribute_to_slaves.py END ==================")
+
+
+if __name__ == "__main__":
+    main()

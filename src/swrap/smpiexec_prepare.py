@@ -86,13 +86,26 @@ def prepare_singularity_runner(destination, sing_args, mpiexec_args):
     oscommand(['chmod +x', sexec_wrap])
 
 
+def add_mpiexec_arg(parser):
+    parser.add_argument('-m', '--mpiexec', type=str, metavar="PATH", default="", required=False,
+                        help="path (inside the container) to mpiexec to be run, default is 'mpiexec'")
+
+
+def create_argparser():
+    parser = sexec.create_argparser()
+    sexec.add_sexec_args(parser)
+    add_mpiexec_arg(parser)
+
+    # parser.print_help()
+    # parser.print_usage()
+    return parser
+
+
 if __name__ == "__main__":
     flush_print("================== smpiexec_prepare.py START ==================")
     current_dir = os.getcwd()
-    args = sexec.arguments()
-
-    # get debug variable
-    debug = args.debug
+    parser = create_argparser()
+    args = parser.parse_args()
 
     # get program and its arguments, set absolute path
     image = sexec.process_image_path(args.image)
@@ -111,7 +124,7 @@ if __name__ == "__main__":
     os.makedirs(pbs_job_aux_dir, mode=0o775)
     
     # get nodefile, copy it to local dir so that it can be passed into container mpiexec later
-    if debug:
+    if args.debug:
         orig_node_file = "testing_hostfile"
     else:
         orig_node_file = os.environ['PBS_NODEFILE']
@@ -120,7 +133,7 @@ if __name__ == "__main__":
 
     # Get ssh keys to nodes and append it to $HOME/.ssh/known_hosts
     ssh_known_hosts_to_append = []
-    if debug:
+    if args.debug:
         # ssh_known_hosts_file = 'testing_known_hosts'
         ssh_known_hosts_file = 'xxx/.ssh/testing_known_hosts'
     else:
@@ -139,7 +152,7 @@ if __name__ == "__main__":
 
     scratch_dir_path = None
     if 'SCRATCHDIR' in os.environ:
-        scratch_dir_path = sexec.prepare_scratch_dir(args.scratch_copy, node_names)
+        scratch_dir_path = sexec.prepare_scratch_dir(args.scratch_copy, node_names, args.verbose)
 
 
     # A] process bindings, exclude ssh agent in launcher bindings
