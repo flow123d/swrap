@@ -24,6 +24,9 @@ if __name__ == "__main__":
     parser = create_argparser()
     args = parser.parse_args()
 
+    # get program and its arguments
+    prog_args = args.prog[1:]
+
     flush_print("Hostname: ", os.popen('hostname').read().strip())
     # mprint("os.environ", os.environ)
 
