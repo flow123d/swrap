@@ -92,7 +92,7 @@ def add_mpiexec_arg(parser):
 
 
 def create_argparser():
-    parser = sexec.create_argparser()
+    parser = sexec.create_base_argparser()
     sexec.add_sexec_args(parser)
     add_mpiexec_arg(parser)
 

@@ -7,9 +7,7 @@ import smpiexec_prepare
 
 
 def create_argparser():
-    parser = sexec.create_base_argparser()
-    sexec.add_sexec_args(parser)
-    smpiexec_prepare.add_mpiexec_arg(parser)
+    parser = smpiexec_prepare.create_argparser()
 
     parser.add_argument('prog', nargs=argparse.REMAINDER,
                         help='''

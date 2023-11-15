@@ -57,7 +57,7 @@ def gather_to_master(node_names, sub_dir, verbose=False, clear=True):
 
 
 def create_parser():
-    parser = sexec.create_argparser()
+    parser = sexec.create_base_argparser()
 
     parser.add_argument('-c', '--clear', action='store_true', default=False, help='clear temporary tarballs')
     parser.add_argument('subdir', nargs=1, help="Subdirectory to copy to SCRATCHDIR.")
