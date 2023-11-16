@@ -85,7 +85,7 @@ def main():
 
     scratch_dir_path = None
     if 'SCRATCHDIR' in os.environ:
-        scratch_dir_path = sexec.prepare_scratch_dir(args.scratch_copy, node_names)
+        scratch_dir_path = sexec.prepare_scratch_dir(args.scratch_copy, node_names, args.verbose)
 
 
     # A] process bindings, exclude ssh agent in launcher bindings
